@@ -1,0 +1,1 @@
+gcc -o lpcr_func_c.so -shared lpcr_func.c

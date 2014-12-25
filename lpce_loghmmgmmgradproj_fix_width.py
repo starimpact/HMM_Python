@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Nov 22 09:31:17 2014
+Created on Wed Dec 24 09:10:13 2014
 
 @author: mzhang
+
+
+grad project is bad...
 """
 
 
@@ -12,15 +15,13 @@ import functions as funcs
 import cv2 as cv
 import log_nhmmgmm as lognhgmm
 import cPickle 
-import simpleCNN as scnn
-import weightCNN as wgtcnn
 import time
 
 maxiter = 10
 gmm_maxiter = 100
-neednum = 2000
-gmmsize = 4
-hmmgmmfile = 'lp_loghmmgmm(20141225.1)_hmmmaxiter[' + str(maxiter) + ']_samplenum[' + str(neednum) + ']_gmmsize[' + str(gmmsize) + ']_gmmmaxiter[' + str(gmm_maxiter) + ']' + '.bin'
+neednum = 70
+gmmsize = 8
+hmmgmmfile = 'lp_loghmmgmm(20141224.1)_hmmmaxiter[' + str(maxiter) + ']_samplenum[' + str(neednum) + ']_gmmsize[' + str(gmmsize) + ']_gmmmaxiter[' + str(gmm_maxiter) + ']' + '.bin'
 #folderpath = '/Users/mzhang/work/LP Data2/'
 folderpath = '/Volumes/ZMData1/LPR_TrainData/new/'
 neednum2 = 30
@@ -344,30 +345,19 @@ def train(lpinfo_list, hmmgmmfile):
 if 1:
     cost_times = {}
     t1 = time.time()
-#    lpinfo_list2, whist2 = lpfuncs.getall_lps2(folderpath2, neednum2, stdshape[0], ifstrech=False)
+    lpinfo_list2, whist2 = lpfuncs.getall_lps2(folderpath2, neednum2, stdshape[0], ifstrech=False)
     lpinfo_list, whist = lpfuncs.getall_lps2(folderpath, neednum, stdshape[0], ifstrech=False)
-#    for key2 in whist2:
-#        if whist.has_key(key2):
-#            whist[key2] += whist2[key2]
-#        else:
-#            whist[key2] = whist2[key2]
+    for key2 in whist2:
+        if whist.has_key(key2):
+            whist[key2] += whist2[key2]
+        else:
+            whist[key2] = whist2[key2]
     print 'width list:'
     print whist
-    lpinfo_list = lpinfo_list #+ lpinfo_list2
+    lpinfo_list = lpinfo_list2 + lpinfo_list
     t2 = time.time()
     cost_times['getall_lps2'] = t2-t1
     print 'total sample number:', len(lpinfo_list)
-    
-    
-    t1 = time.time()
-    wgtcnn.train(lpinfo_list[:trainnum], batch_size=100, ishape=stdshape)
-    t2 = time.time()
-    cost_times['wgtcnn.train'] = t2-t1
-    
-    t1 = time.time()
-    wgtcnn.fillObsChain(lpinfo_list, stdsize=stdshape)
-    t2 = time.time()
-    cost_times['wgtcnn.fillObsChain'] = t2-t1
     
     t1 = time.time()
     train(lpinfo_list[:trainnum], hmmgmmfile)
@@ -390,5 +380,4 @@ if 0:
     hmm = lognhgmm.siLogNHMMGMM()
     hmm.read(hmmgmmfile)
     hmm.saveTXT('log_nhmmgmm_info.txt')
-    wgtcnn.saveCNNParam2TXT()
-
+    scnn.saveCNNParam2TXT()

@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Nov 21 13:57:51 2014
+Created on Tue Dec 23 10:10:08 2014
 
 @author: mzhang
 
-This is good.
-800 training samples is trained, and we get 2 erros over 200 test samples.
-And, the 2 error license plates have weird number 1.
+weighted cnn
 
 """
 
@@ -81,26 +79,20 @@ class HiddenLayer(object):
         #        We have no info for other function, so we use the same as
         #        tanh.
         if W is None:
-            W_values = np.asarray(rng.uniform(
-                    low=-np.sqrt(6. / (n_in + n_out)),
-                    high=np.sqrt(6. / (n_in + n_out)),
-                    size=(n_in, n_out)), dtype=theano.config.floatX)
+            W_values = np.asarray(rng.uniform(low=-np.sqrt(6. / (n_in + n_out)), high=np.sqrt(6. / (n_in + n_out)), size=(n_in, n_out)), dtype=theano.config.floatX)
             if activation == theano.tensor.nnet.sigmoid:
                 W_values *= 4
-
             W = theano.shared(value=W_values, name='W', borrow=True)
 
         if b is None:
             b_values = np.zeros((n_out,), dtype=theano.config.floatX)
             b = theano.shared(value=b_values, name='b', borrow=True)
-
+        
         self.W = W
         self.b = b
-
+        
         lin_output = T.dot(input, self.W) + self.b
-        self.lin_output = lin_output
-        self.output = (lin_output if activation is None
-                       else activation(lin_output))
+        self.output = (lin_output if activation is None else activation(lin_output))
         # parameters of the model
         self.params = [self.W, self.b]
 
@@ -115,7 +107,7 @@ class LogisticRegression(object):
     determine a class membership probability.
     """
 
-    def __init__(self, input, n_in, n_out):
+    def __init__(self, input, n_in, n_out, W = None, b = None):
         """ Initialize the parameters of the logistic regression
 
         :type input: theano.tensor.TensorType
@@ -133,35 +125,45 @@ class LogisticRegression(object):
         """
 
         # initialize with 0 the weights W as a matrix of shape (n_in, n_out)
-        self.W = theano.shared(value=np.zeros((n_in, n_out),
-                                                 dtype=theano.config.floatX),
-                                name='W', borrow=True)
+        if W is None:
+            W = theano.shared(value=np.zeros((n_in, n_out), dtype=theano.config.floatX), name='W', borrow=True)
+        
         # initialize the baises b as a vector of n_out 0s
-        self.b = theano.shared(value=np.zeros((n_out,),
-                                                 dtype=theano.config.floatX),
-                               name='b', borrow=True)
-
+        if b is None:
+            b = theano.shared(value=np.zeros((n_out,), dtype=theano.config.floatX), name='b', borrow=True)
+        
+        self.W = W
+        self.b = b
         # compute vector of class-membership probabilities in symbolic form
         self.p_y_given_x = T.nnet.sigmoid(T.dot(input, self.W) + self.b)
 #        self.p_y_given_x = T.nnet.softmax(T.dot(input, self.W) + self.b)
         
         # parameters of the model
         self.params = [self.W, self.b]
-
+    
+    def negative_log_likelihood_test(self):
+        return self.p_y_given_x
+        
     def negative_log_likelihood(self, y):
         lt1 = T.log(self.p_y_given_x)
         lt2 = T.log(1.0 - self.p_y_given_x)
         ytmp = y.dimshuffle(0, 'x')
         return -T.mean(ytmp * lt1 + (1 - ytmp) * lt2)
-#        return -T.mean(T.log(self.p_y_given_x)[T.arange(y.shape[0]), y])
-#        return -T.mean(logistic)
-
+        
+    def negative_log_likelihood_weight(self, y, wgt):
+        lt1 = T.log(self.p_y_given_x)
+        lt2 = T.log(1.0 - self.p_y_given_x)
+        ytmp = y.dimshuffle(0, 'x')
+        wgttmp = wgt.dimshuffle(0, 'x')
+        
+#        return -T.mean(ytmp * lt1 + (1 - ytmp) * lt2)
+        return -T.sum(wgttmp*(ytmp * lt1 + (1 - ytmp) * lt2))/T.sum(wgt)
 
 
 class LeNetConvPoolLayer(object):
     """Pool Layer of a convolutional network """
 
-    def __init__(self, rng, input, filter_shape, image_shape, poolsize=(2, 2)):
+    def __init__(self, rng, input, filter_shape, image_shape, poolsize=(2, 2), W = None, b = None):
         """
         Allocate a LeNetConvPoolLayer with shared variable internal parameters.
 
@@ -195,24 +197,23 @@ class LeNetConvPoolLayer(object):
         fan_out = (filter_shape[0] * np.prod(filter_shape[2:]) /
                    np.prod(poolsize))
         # initialize weights with random weights
-        W_bound = np.sqrt(6. / (fan_in + fan_out))
-        self.W = theano.shared(np.asarray(
-            rng.uniform(low=-W_bound, high=W_bound, size=filter_shape),
-            dtype=theano.config.floatX),
-                               borrow=True)
+        if W is None:
+            W_bound = np.sqrt(6. / (fan_in + fan_out))
+            W = theano.shared(np.asarray(rng.uniform(low=-W_bound, high=W_bound, size=filter_shape), dtype=theano.config.floatX), borrow=True)
 
         # the bias is a 1D tensor -- one bias per output feature map
-        b_values = np.zeros((filter_shape[0],), dtype=theano.config.floatX)
-        self.b = theano.shared(value=b_values, borrow=True)
-
+        if b is None:
+            b_values = np.zeros((filter_shape[0],), dtype=theano.config.floatX)
+            b = theano.shared(value=b_values, borrow=True)
+        
+        self.W = W
+        self.b = b
         # convolve input feature maps with filters
-        conv_out = conv.conv2d(input=input, filters=self.W,
-                filter_shape=filter_shape, image_shape=image_shape)
+        conv_out = conv.conv2d(input=input, filters=self.W, filter_shape=filter_shape, image_shape=image_shape)
         self.conv_out = conv_out
         # downsample each feature map individually, using maxpooling
-        pooled_out = downsample.max_pool_2d(input=conv_out,
-                                            ds=poolsize, ignore_border=True)
-
+        pooled_out = downsample.max_pool_2d(input=conv_out, ds=poolsize, ignore_border=True)
+        
         # add the bias term. Since the bias is a vector (1D array), we first
         # reshape it to a tensor of shape (1,n_filters,1,1). Each bias will
         # thus be broadcasted across mini-batches and feature map
@@ -223,12 +224,11 @@ class LeNetConvPoolLayer(object):
         self.params = [self.W, self.b]
 
 
-def buildCNN(batch_size, ishape):
+def buildWeightCNN(ishape, batch_size):
     ######################
     # BUILD ACTUAL MODEL #
     ######################
     print '... building the model'
-    
     rng = np.random.RandomState(23455)
     
     nkerns = 4 #kernel number
@@ -237,15 +237,13 @@ def buildCNN(batch_size, ishape):
     h_out = 16 #hidden layer output number
     
     print 'nkerns:', nkerns, ', filtersize:', filtersize, ', poolsize:', poolsize, ', h_out:', h_out
-    
-    # allocate symbolic variables for the data
-    
     x = T.matrix('x')   # the data is presented as rasterized images
     y = T.ivector('y')
+    wgt = T.fvector('wgt')
+    
     # Reshape matrix of rasterized images of shape (batch_size,28*28)
     # to a 4D tensor, compatible with our LeNetConvPoolLayer
     layer0_input = x.reshape((batch_size, 1, ishape[0], ishape[1]))
-    
     layer0 = LeNetConvPoolLayer(rng, input=layer0_input,
             image_shape=(batch_size, 1, ishape[0], ishape[1]),
             filter_shape=(nkerns, 1, filtersize, filtersize), poolsize=(poolsize, poolsize))
@@ -255,20 +253,49 @@ def buildCNN(batch_size, ishape):
     l1_input_mod = ((ishape[0] - filtersize + 1) % poolsize, (ishape[1] - filtersize + 1) % poolsize)
     print 'l1_inputshape:', l1_inputshape, l1_input_mod
     # construct a fully-connected sigmoidal layer
-    layer1 = HiddenLayer(rng, input=layer1_input, n_in=nkerns * l1_inputshape[0] * l1_inputshape[1], n_out=h_out, activation=T.nnet.sigmoid)
+    layer1 = HiddenLayer(rng, input=layer1_input, n_in=nkerns * l1_inputshape[0] * l1_inputshape[1], 
+                         n_out=h_out, activation=T.nnet.sigmoid)
     
     # classify the values of the fully-connected sigmoidal layer
     layer2 = LogisticRegression(input=layer1.output, n_in=h_out, n_out=1)
     
     # the cost we minimize during training is the NLL of the model
-    cost = layer2.negative_log_likelihood(y)
+    cost_train_wegit = layer2.negative_log_likelihood_weight(y, wgt)
+    cost_train = layer2.negative_log_likelihood(y)
     
+    cost_test = layer2.negative_log_likelihood_test()
     
-    # create a list of all model parameters to be fit by gradient descent
     params = layer2.params + layer1.params + layer0.params
-    
-    return cost, params, x, y
 
+    return cost_train, cost_train_wegit, params, x, y, wgt, cost_test
+    
+
+def getsamples_scales(lpinfo_list, imgBatchSize, batch_size, minibatch_index):
+    lpinfo_patch = lpinfo_list[minibatch_index * imgBatchSize:(minibatch_index + 1) * imgBatchSize]
+    datasets = lpcr_func.get_3sets_data_from_lpinfo_multiscale(lpinfo_patch, stdsize=ishape, sizeratio=(5., 0., 1.))
+    train_set_x, train_set_y = datasets[0]
+    valid_set_x, valid_set_y = datasets[1]
+    test_set_x, test_set_y = datasets[2]
+#        print train_set_x.shape, train_set_y.shape
+    train_num, train_dim = train_set_x.shape
+    if train_set_x.shape[0] < batch_size:
+        addnum = batch_size - train_num
+        train_set_x = np.append(train_set_x, np.zeros((addnum, train_dim), dtype=train_set_x.dtype), axis=0)
+        train_set_y = np.append(train_set_y, np.zeros(addnum, dtype=train_set_y.dtype)-1, axis=0)
+        print 'add data: %d/%d->%d.....'%(batch_size, train_num, addnum)
+#                continue
+#        print train_set_x.shape, train_set_y.shape
+    tmptrainx = train_set_x[:batch_size, :]
+    tmptrainy = train_set_y[:batch_size]
+    posnum = np.sum(tmptrainy==1)
+    negnum = np.sum(tmptrainy==0)
+    allnum = posnum + negnum
+#        print posnum, negnum, allnum
+    tmpwgt = np.zeros_like(tmptrainy, dtype=np.float32)
+    tmpwgt[tmptrainy==1] = 0.5 / posnum
+    tmpwgt[tmptrainy==0] = 0.5 / negnum
+    
+    return tmptrainx, tmptrainy, tmpwgt
 
 
 def train(lpinfo_list, batch_size, ishape = (32, 14)):
@@ -287,50 +314,64 @@ def train(lpinfo_list, batch_size, ishape = (32, 14)):
     :type nkerns: list of ints
     :param nkerns: number of kernels on each layer
     """
+    usewgt = True
     learning_rate = 0.1
     n_epochs = 400
     showperiod = 800
     
-    datasets = lpcr_func.get_3sets_data_from_lpinfo(lpinfo_list, stdsize=ishape, sizeratio=(5., 0., 1.))
     
+    if usewgt:
+        print 'training with weighted sample...'
+    else:
+        print 'training without weighted sample...'
+        
+    print 'loading data...'
+    datasets = lpcr_func.get_3sets_data_from_lpinfo_multiscale(lpinfo_list, stdsize=ishape, sizeratio=(5., 0., 1.))
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1]
     test_set_x, test_set_y = datasets[2]
-
-    # compute number of minibatches for training, validation and testing
-    n_train_batches = train_set_x.get_value(borrow=True).shape[0]
-    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0]
-    n_test_batches = test_set_x.get_value(borrow=True).shape[0]
-    n_train_batches /= batch_size
-    n_valid_batches /= batch_size
-    n_test_batches /= batch_size
     
-    print 'trainset_size:',n_train_batches, ', validset_size:', n_valid_batches, ', testset_size:', n_test_batches
+    posnum = np.sum(train_set_y==1)
+    negnum = np.sum(train_set_y==0)
+    wgtall = np.zeros_like(train_set_y, dtype=np.float32)
+    wgtall[train_set_y==1] = 0.5 / posnum
+    wgtall[train_set_y==0] = 0.5 / negnum
+    
+    n_train_batches = train_set_x.shape[0] / batch_size
+    n_test_batches = test_set_x.shape[0] / batch_size
     print 'learning_rate:',learning_rate,', max_epochs:',n_epochs,', batch_size:',batch_size
-
-    index = T.lscalar()  # index to a [mini]batch
+    print 'n_train_batches:', n_train_batches, ', n_test_batches:', n_test_batches
     
-    cost, params, x, y = buildCNN(batch_size, ishape)
+    cost_train, cost_train_weight, params, x, y, wgt, cost_test = buildWeightCNN(ishape, batch_size)
     
-    # create a list of gradients for all model parameters
-    grads = T.grad(cost, params)
+    cnnparamsfile = 'wgtcnn.params.bin'
+    if 1:
+        print 'set model from %s....'%(cnnparamsfile)
+        params_trained = cPickle.load(open(cnnparamsfile, 'rb'))
+        updates = []
+        for param_i, trained_i in zip(params, params_trained):
+            updates.append((param_i, trained_i))
+        
+        set_model = theano.function([], [], updates=updates)
+        set_model()
     
-    # create a function to compute the mistakes that are made by the model
-    test_model = theano.function([index], cost,
-             givens={
-                x: test_set_x[index * batch_size: (index + 1) * batch_size],
-                y: test_set_y[index * batch_size: (index + 1) * batch_size]})
-
-
+    if usewgt:
+        grads = T.grad(cost_train_weight, params)
+    else:
+        grads = T.grad(cost_train, params)
+    
     updates = []
     for param_i, grad_i in zip(params, grads):
         updates.append((param_i, param_i - learning_rate * grad_i))
-
-    train_model = theano.function([index], cost, updates=updates,
-          givens={
-            x: train_set_x[index * batch_size: (index + 1) * batch_size],
-            y: train_set_y[index * batch_size: (index + 1) * batch_size]})
-
+    
+    if usewgt:
+        train_model_weight = theano.function(inputs=[x, y, wgt], outputs=cost_train_weight, updates=updates)
+    else:
+        train_model = theano.function(inputs=[x, y], outputs=cost_train, updates=updates)
+    
+    test_model = theano.function(inputs=[x], outputs=cost_test)
+    
+    
     ###############
     # TRAIN MODEL #
     ###############
@@ -338,23 +379,57 @@ def train(lpinfo_list, batch_size, ishape = (32, 14)):
     # early-stopping parameters
 
     start_time = time.clock()
-
+    
     epoch = 0
     while epoch < n_epochs:
         epoch = epoch + 1
-        for minibatch_index in xrange(n_train_batches):
+        for batchidx in xrange(n_train_batches):
             
-            iter = (epoch - 1) * n_train_batches + minibatch_index
+#            iter = (epoch - 1) * n_train_batches + batchidx
+#            print tmpwgt
+            tmptrainx = train_set_x[batchidx*batch_size:(batchidx+1)*batch_size, :]
+            tmptrainy = train_set_y[batchidx*batch_size:(batchidx+1)*batch_size]
+            if usewgt:
+                tmpwgt1 = wgtall[batchidx*batch_size:(batchidx+1)*batch_size]
+                cost = train_model_weight(tmptrainx, tmptrainy, tmpwgt1)
+            else:
+                cost = train_model(tmptrainx, tmptrainy)
             
-            train_cost = train_model(minibatch_index)
-#            print train_cost
-            if iter % showperiod == 0:
-                test_cost = [test_model(i) for i in xrange(n_test_batches)]
-                print 'epoch:%d/%d'%(epoch, n_epochs), 'training @ iter = ', iter, '  test_cost:', np.mean(test_cost)
-                cnnparamsfile = 'cnn.params.bin'
-                cPickle.dump(params, open(cnnparamsfile, 'wb'))
-                print 'cnn param is saved into:', cnnparamsfile
-                
+        
+#        test_cost = [test_model(test_set_x[tbi*batch_size:(tbi+1)*batch_size, :], test_set_y[tbi*batch_size:(tbi+1)*batch_size]) for tbi in xrange(n_test_batches)]
+        rightnumall = [0, 0]
+        numall = [0, 0]
+        test_cost = 0
+        for tbi in xrange(n_test_batches):
+            tmp_test = test_set_x[tbi*batch_size:(tbi+1)*batch_size, :]
+            tmp_y = test_set_y[tbi*batch_size:(tbi+1)*batch_size]
+            ret = test_model(tmp_test)
+            
+            cost = np.sum(ret[tmp_y==0])
+            cost += np.sum(1.0-ret[tmp_y==1])
+            test_cost += cost
+            
+            posnum = np.sum(tmp_y==1)
+            posret = ret[tmp_y==1]
+            rightposnum = np.sum(posret>0.5)
+            rightnumall[0] += rightposnum
+            numall[0] += posnum
+            
+            negnum = np.sum(tmp_y==0)
+            negret = ret[tmp_y==0]
+            rightnegnum = np.sum(negret<0.5)
+            rightnumall[1] += rightnegnum
+            numall[1] += negnum
+        
+        cPickle.dump(params, open(cnnparamsfile, 'wb'))
+        print 'cnn param is saved into:', cnnparamsfile
+        
+        print 'epoch:%d/%d'%(epoch, n_epochs), \
+            '+:%d/%d -:%d/%d'%(rightnumall[0], numall[0], rightnumall[1], numall[1]), \
+            'test_cost:%.6f'%(test_cost/np.sum(numall))
+        
+#        print 'epoch:%d/%d'%(epoch, n_epochs), '  test_cost:', np.mean(test_cost)
+    
     end_time = time.clock()
     print('Optimization complete.')
     print >> sys.stderr, ('The code for file ' +
@@ -362,12 +437,15 @@ def train(lpinfo_list, batch_size, ishape = (32, 14)):
                           ' ran for %.2fm' % ((end_time - start_time) / 60.))
 
 
+
 def fillObsChain(lpinfo_list, stdsize):
     print 'fill the obs_chain using scnn...'
     
-    cnnparamsfile = 'cnn.params.bin'
+    cnnparamsfile = 'wgtcnn.params.bin'
     params_trained = cPickle.load(open(cnnparamsfile, 'rb'))
-    cost, params, x, y = buildCNN(1, stdsize)
+    cost_train, cost_train_weight, params, x, y, wgt, cost_test = buildWeightCNN(stdsize, 1)
+    
+    print 'set model from %s....'%(cnnparamsfile)
     
     updates = []
     for param_i, trained_i in zip(params, params_trained):
@@ -376,9 +454,8 @@ def fillObsChain(lpinfo_list, stdsize):
     set_model = theano.function([], [], updates=updates)
     set_model()
     
-    test_model = theano.function([x, y], cost)
+    test_model = theano.function([x], cost_test)
     veclen = stdsize[0]*stdsize[1]
-    yvalue = np.ones(1, dtype=np.int32)
     halfw = stdsize[1]/2
     for lp in lpinfo_list:
         gimg = lp.charobj.grayimg
@@ -388,10 +465,11 @@ def fillObsChain(lpinfo_list, stdsize):
             imgpart = gimg[:, wi:wi+stdsize[1]]
             imgrsz = cv2.resize(imgpart, (stdsize[1], stdsize[0])) #
             imgvec = np.reshape(imgrsz, veclen)
-            fimgvec = imgvec.astype(np.float32)
-            fimgvec = lpcr_func.normalize_data(fimgvec)
-            score = test_model(fimgvec.reshape(1, veclen), yvalue)
-            oriscore = np.exp(-score) * 255
+#            fimgvec = imgvec.astype(np.float32)
+#            fimgvec = lpcr_func.normalize_data(fimgvec)
+            fimgvec = lpcr_func.normalize_img_data_to_0_1_c(imgvec, 10)
+            score = test_model(fimgvec.reshape(1, veclen))
+            oriscore = score * 255
             obs_chain[wi+halfw] = oriscore
             mask[:, wi+halfw] = int(oriscore)
             
@@ -408,203 +486,8 @@ def fillObsChain(lpinfo_list, stdsize):
 
 
 
-def buildCNNtmp(batch_size, ishape):
-    ######################
-    # BUILD ACTUAL MODEL #
-    ######################
-    print '... building the model'
-    
-    rng = np.random.RandomState(23455)
-    
-    nkerns = 4 #kernel number
-    filtersize = 5 #kernel filter size
-    poolsize = 2 #pooling size
-    h_out = 32 #hidden layer output number
-    
-    # allocate symbolic variables for the data
-    
-    x = T.matrix('x')   # the data is presented as rasterized images
-    y = T.ivector('y')
-    # Reshape matrix of rasterized images of shape (batch_size,28*28)
-    # to a 4D tensor, compatible with our LeNetConvPoolLayer
-    layer0_input = x.reshape((batch_size, 1, ishape[0], ishape[1]))
-    
-    layer0 = LeNetConvPoolLayer(rng, input=layer0_input,
-            image_shape=(batch_size, 1, ishape[0], ishape[1]),
-            filter_shape=(nkerns, 1, filtersize, filtersize), poolsize=(poolsize, poolsize))
-
-    layer1_input = layer0.output.flatten(2)
-    l1_inputshape = ((ishape[0] - filtersize + 1) / poolsize, (ishape[1] - filtersize + 1) / poolsize)
-    l1_input_mod = ((ishape[0] - filtersize + 1) % poolsize, (ishape[1] - filtersize + 1) % poolsize)
-    print 'l1_inputshape:', l1_inputshape, l1_input_mod
-    # construct a fully-connected sigmoidal layer
-    layer1 = HiddenLayer(rng, input=layer1_input, n_in=nkerns * l1_inputshape[0] * l1_inputshape[1], n_out=h_out, activation=T.nnet.sigmoid)
-    
-    # classify the values of the fully-connected sigmoidal layer
-    layer2 = LogisticRegression(input=layer1.output, n_in=h_out, n_out=1)
-    
-    # the cost we minimize during training is the NLL of the model
-    cost = layer2.negative_log_likelihood(y)
-    
-    
-    # create a list of all model parameters to be fit by gradient descent
-    params = layer2.params + layer1.params + layer0.params
-    
-    return cost, params, x, y, layer1_input, layer1.lin_output, layer1.output, layer2.p_y_given_x
-    
-def tmptest2(lp, stdsize):
-    print 'fill the obs_chain using scnn...'
-    
-    cnnparamsfile = 'cnn.params.bin'
-    params_trained = cPickle.load(open(cnnparamsfile, 'rb'))
-    cost, params, x, y, layer1_input, layer1_lin_output, layer1_output, layer2_p_y_given_x = buildCNNtmp(1, stdsize)
-    
-    updates = []
-    for param_i, trained_i in zip(params, params_trained):
-        updates.append((param_i, trained_i))
-    
-    set_model = theano.function([], [], updates=updates)
-    set_model()
-    
-    do_cov = theano.function([x], layer1_input)
-    do_hid1pre = theano.function([x], layer1_lin_output)
-    do_hid1 = theano.function([x], layer1_output)
-    do_hid2 = theano.function([x], layer2_p_y_given_x)
-    
-    test_model = theano.function([x, y], cost)
-    veclen = stdsize[0]*stdsize[1]
-    yvalue = np.ones(1, dtype=np.int32)
-    halfw = stdsize[1]/2
-    
-    gimg = lp.charobj.grayimg
-    mask = np.zeros_like(gimg)
-    obs_chain = np.zeros(gimg.shape[1], dtype=np.float32)
-    for wi in xrange(gimg.shape[1]-stdsize[1]):
-        imgpart = gimg[:, wi:wi+stdsize[1]]
-        imgrsz = cv2.resize(imgpart, (stdsize[1], stdsize[0])) #resize image
-        imgvec = np.reshape(imgrsz, veclen)
-#        print imgpart
-        fimgvec = imgvec.astype(np.float32)
-#        print fimgvec
-        fimgvec = lpcr_func.normalize_data(fimgvec)
-#        print fimgvec
-        imgvector = fimgvec.reshape(1, veclen)
-        
-        cov_result = do_cov(imgvector)
-        hid1pre_result = do_hid1pre(imgvector)
-        hid1_result = do_hid1(imgvector)
-        hid2_result = do_hid2(imgvector)
-        print cov_result[0, :]
-        print hid1pre_result
-        print 'hid1_result:', hid1_result
-        print 'hid2_result:', hid2_result
-        print 'log:', np.log(hid2_result)
-        
-        score = test_model(imgvector, yvalue)        
-        print score
-        
-        oriscore = np.exp(-score) * 255
-        print 'oriscore:', oriscore
-        obs_chain[wi+halfw] = oriscore
-        mask[:, wi+halfw] = int(oriscore)
-        if wi >= 0:
-            break
-#            imgvec = fimgvec * 255
-#            imgvec = imgvec.astype(np.uint8);
-#            cv2.imshow('rsz', imgvec.reshape(stdsize))
-#            cv2.waitKey(0)
-    lp.charobj.obs_chain = obs_chain
-    allimg = gimg / 2 + mask / 2
-    cv2.imshow('result', allimg)
-    cv2.waitKey(40)
-    
-def tmptest(lp, stdsize):
-    print 'fill the obs_chain using scnn...'
-    
-    cnnparamsfile = 'cnn.params.bin'
-    params_trained = cPickle.load(open(cnnparamsfile, 'rb'))
-    cost, params, x, y, cnnRet_tmp = buildCNNtmp(1, stdsize)
-    
-#    print len(params_trained)
-    ttt = showTensorData(params_trained[4])
-    bbb = params_trained[5]
-    bbb1 = bbb[:1]
-    ttt1 = ttt[:1, :1, :, :]
-    print ttt.shape, ttt1.shape
-    print ttt1[0, 0, :, :]
-    imginput = T.tensor4('imginput')
-    conv_out = conv.conv2d(input=imginput, filters=ttt1)
-    do_Conv = theano.function([imginput], conv_out)
-    pooled_out = downsample.max_pool_2d(input=conv_out, ds=(2, 2), ignore_border=True)
-    do_pool = theano.function([imginput], pooled_out)
-    add_out = pooled_out + bbb1.dimshuffle('x', 0, 'x', 'x')
-    do_add = theano.function([imginput], add_out)
-    sigmoid_out = T.nnet.sigmoid(add_out)
-    do_sigmoid = theano.function([imginput], sigmoid_out)
-    
-    updates = []
-    for param_i, trained_i in zip(params, params_trained):
-        updates.append((param_i, trained_i))
-    
-    set_model = theano.function([], [], updates=updates)
-    set_model()
-    
-    test_model = theano.function([x, y], cost)
-    veclen = stdsize[0]*stdsize[1]
-    yvalue = np.ones(1, dtype=np.int32)
-    halfw = stdsize[1]/2
-    
-    gimg = lp.charobj.grayimg
-    mask = np.zeros_like(gimg)
-    obs_chain = np.zeros(gimg.shape[1], dtype=np.float32)
-    for wi in xrange(gimg.shape[1]-stdsize[1]):
-        imgpart = gimg[:, wi:wi+stdsize[1]]
-        imgrsz = cv2.resize(imgpart, (stdsize[1], stdsize[0])) #resize image
-        imgvec = np.reshape(imgrsz, veclen)
-#        print imgpart
-        fimgvec = imgvec.astype(np.float32)
-#        print fimgvec
-        fimgvec = lpcr_func.normalize_data(fimgvec)
-#        print fimgvec
-        imgvector = fimgvec.reshape(1, veclen)
-        
-        score = test_model(imgvector, yvalue)
-        
-        imgvector2 = imgvector.reshape((1, 1, stdsize[0], stdsize[1]))
-        
-        imgvector2tmp = imgvector2[:1, :1, :5, :5]
-        cov_result = do_Conv(imgvector2)
-        pool_result = do_pool(imgvector2)
-        sigmoid_result = do_sigmoid(imgvector2)
-        add_result = do_add(imgvector2)
-        print imgvector2tmp
-        tmp111 = (ttt1[0, 0, -1::-1, -1::-1] * imgvector2tmp[0, 0, :, :])
-        print tmp111
-        print np.sum(tmp111)
-        print cov_result.shape, pool_result.shape
-        print cov_result[0, 0, :, :]
-        print pool_result[0, 0, :, :]
-        print add_result[0, 0, :, :]
-        print sigmoid_result[0, 0, :, :]
-        
-        
-        oriscore = np.exp(-score) * 255
-        print 'oriscore:', oriscore
-        obs_chain[wi+halfw] = oriscore
-        mask[:, wi+halfw] = int(oriscore)
-        if wi >= 0:
-            break
-#            imgvec = fimgvec * 255
-#            imgvec = imgvec.astype(np.uint8);
-#            cv2.imshow('rsz', imgvec.reshape(stdsize))
-#            cv2.waitKey(0)
-    lp.charobj.obs_chain = obs_chain
-    allimg = gimg / 2 + mask / 2
-    cv2.imshow('result', allimg)
-    cv2.waitKey(40)
-
 def saveCNNParam2TXT():
-    cnnparamsfile = 'cnn.params.bin'
+    cnnparamsfile = 'wgtcnn.params.bin'
     params_trained = cPickle.load(open(cnnparamsfile, 'rb'))
     cnnparamstxt = cnnparamsfile + '.txt'
     txtfile = open(cnnparamstxt, 'w')
@@ -675,22 +558,17 @@ def saveCNNParam2TXT():
 #                else:
 #                    txtfile.write('}')
             txtfile.write('};\n\n')
-                        
+
     txtfile.close()
     print 'cnn params is saved into', cnnparamstxt, '.'
 
-
-#saveCNNParam2TXT()
-#ishape = (32, 10) #cnn input shape
-#lpimg_neednum = 100
-#folderpath = '/Users/mzhang/work/LP Data2/'
-#lpinfo_list = lpfuncs.getall_lps(folderpath, lpimg_neednum, ifstrech=False)
-##train(lpinfo_list, batch_size=100, ishape=ishape)
-#test(lpinfo_list, ishape)
-
-
-
-
+if 0:
+    stdshape = (28, 14)
+    neednum = 1000
+    folderpath = '/Volumes/ZMData1/LPR_TrainData/new/'
+    lpinfo_list, width_hist = lpfuncs.getall_lps2(folderpath, neednum, stdshape[0], ifstrech=False)
+    print len(lpinfo_list)
+    train(lpinfo_list, batch_size=200, ishape=stdshape)
 
 
 

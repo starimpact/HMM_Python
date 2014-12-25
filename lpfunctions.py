@@ -22,6 +22,7 @@ class CHR_Info:
         self.state_chain = None #state chain
         self.obs_chain = None #observation chain
         self.charbbs = [] #char's bound box
+        self.lp_bndbox = []
 
 
 class LP_Info:
@@ -226,13 +227,14 @@ def get_state_chain(mask_chain):
     return state_chain
 
 
-def extract_lpinfo(lpinfo, ifstrech=True):
+def extract_lpinfo(lpinfo, rszh = 32, ifstrech=True):
     img = cv.imread(lpinfo.img_fn, cv.CV_LOAD_IMAGE_GRAYSCALE)
 #    img = cv.imread(lpinfo.img_fn)
-    bb = lpinfo.lp_bndbox
+    bb = np.copy(lpinfo.lp_bndbox)
     
-    extendy = 4 #np.random.randint(2, 4)
-    extendx = 32 #np.random.randint(16, 32)
+    extendy = (bb[3] - bb[1]) / 10 #np.random.randint(2, 4)
+    extendx = (bb[2] - bb[0]) / 4 #np.random.randint(16, 32)
+    
     
     bb[0] = 0 if bb[0] - extendx < 0 else bb[0] - extendx
     bb[1] = 0 if bb[1] - extendy < 0 else bb[1] - extendy
@@ -248,7 +250,7 @@ def extract_lpinfo(lpinfo, ifstrech=True):
         strechimg = lpimg
     
     #resize image into the uniform height
-    resizehight = 32
+    resizehight = rszh
     resizerate = resizehight * 1.0 / strechimg.shape[0]
     newshape = [0, 0]
     newshape[0] = resizehight
@@ -268,7 +270,7 @@ def extract_lpinfo(lpinfo, ifstrech=True):
     cv.imshow('img', allimg)
     
     #calc new bound box
-    lpinfo.lp_bndbox = calc_newbb(lpinfo.lp_bndbox, bb)
+    lpinfo.charobj.lp_bndbox = calc_newbb(lpinfo.lp_bndbox, bb)
     lpinfo.charobj.grayimg = np.copy(strechimg)
     lpinfo.charobj.sblimg = np.copy(sblimg)
 #    lpinfo.charobj.grayimgf = strechimg.astype(np.float32) / 255
@@ -282,7 +284,7 @@ def extract_lpinfo(lpinfo, ifstrech=True):
     
     #show the char boundbox of LP
     showcharbb(lpinfo.charobj.charbbs, lpinfo.charobj.grayimg)
-    print lpinfo.char_name
+    print lpinfo.char_name, ', [', extendx, ', ', extendy, ']'
     
     #get mask image
     mask = generateMask(lpinfo.charobj.grayimg, lpinfo.char_name, lpinfo.charobj.charbbs)
@@ -298,7 +300,7 @@ def extract_lpinfo(lpinfo, ifstrech=True):
     lpinfo.charobj.obs_chain = np.asarray(obs_chain, dtype=np.int32)
 #    print obs_chain
     
-    cv.waitKey(20)
+    cv.waitKey(10)
 
 
 def row_normalize(data):
@@ -330,7 +332,7 @@ def getall_lps(folderpath, neednum=-1, ifstrech=True):
     return lpinfo_list
 
 
-def getall_lps2(folderpath, neednum=-1, ifstrech=True):
+def getall_lps2(folderpath, neednum=-1, rszh = 32, ifstrech=True):
     lpinfo_list = readall2(folderpath, neednum)
     lpinfo_num = len(lpinfo_list)
     print lpinfo_num
@@ -338,13 +340,26 @@ def getall_lps2(folderpath, neednum=-1, ifstrech=True):
         neednum = lpinfo_num
     
     print neednum
-    
+    hist = {}
     for i in xrange(neednum):
         lpi = lpinfo_list[i]
         print '%d:%s'%(i, lpi.img_fn)
-        extract_lpinfo(lpi, ifstrech)
+        extract_lpinfo(lpi, rszh, ifstrech)
+        bbs = lpi.charobj.charbbs
+        chname = lpi.char_name
+        for j in xrange(len(bbs)):
+            if chname[j] == '-':
+                continue
+            bb = bbs[j]
+            cw = bb[2]-bb[0]
+            if hist.has_key(cw) == False:
+                hist[cw] = 1
+            else:
+                hist[cw] += 1
+        
         print '-----------------------------'
     lpinfo_list = lpinfo_list[:neednum]
+#    print hist
     
-    return lpinfo_list
+    return lpinfo_list, hist
     
