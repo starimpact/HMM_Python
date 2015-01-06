@@ -224,17 +224,17 @@ class LeNetConvPoolLayer(object):
         self.params = [self.W, self.b]
 
 
-def buildWeightCNN(ishape, batch_size):
+def buildWeightCNN(ishape, batch_size, nkerns=4, h_out=16):
     ######################
     # BUILD ACTUAL MODEL #
     ######################
     print '... building the model'
     rng = np.random.RandomState(23455)
     
-    nkerns = 4 #kernel number
+#    nkerns = 8 #4 #kernel number
     filtersize = 5 #kernel filter size
     poolsize = 2 #pooling size
-    h_out = 16 #hidden layer output number
+#    h_out = 128 #16 #hidden layer output number
     
     print 'nkerns:', nkerns, ', filtersize:', filtersize, ', poolsize:', poolsize, ', h_out:', h_out
     x = T.matrix('x')   # the data is presented as rasterized images
@@ -270,63 +270,89 @@ def buildWeightCNN(ishape, batch_size):
     return cost_train, cost_train_wegit, params, x, y, wgt, cost_test
     
 
-def getsamples_scales(lpinfo_list, imgBatchSize, batch_size, minibatch_index):
-    lpinfo_patch = lpinfo_list[minibatch_index * imgBatchSize:(minibatch_index + 1) * imgBatchSize]
-    datasets = lpcr_func.get_3sets_data_from_lpinfo_multiscale(lpinfo_patch, stdsize=ishape, sizeratio=(5., 0., 1.))
-    train_set_x, train_set_y = datasets[0]
-    valid_set_x, valid_set_y = datasets[1]
-    test_set_x, test_set_y = datasets[2]
-#        print train_set_x.shape, train_set_y.shape
-    train_num, train_dim = train_set_x.shape
-    if train_set_x.shape[0] < batch_size:
-        addnum = batch_size - train_num
-        train_set_x = np.append(train_set_x, np.zeros((addnum, train_dim), dtype=train_set_x.dtype), axis=0)
-        train_set_y = np.append(train_set_y, np.zeros(addnum, dtype=train_set_y.dtype)-1, axis=0)
-        print 'add data: %d/%d->%d.....'%(batch_size, train_num, addnum)
-#                continue
-#        print train_set_x.shape, train_set_y.shape
-    tmptrainx = train_set_x[:batch_size, :]
-    tmptrainy = train_set_y[:batch_size]
-    posnum = np.sum(tmptrainy==1)
-    negnum = np.sum(tmptrainy==0)
-    allnum = posnum + negnum
-#        print posnum, negnum, allnum
-    tmpwgt = np.zeros_like(tmptrainy, dtype=np.float32)
-    tmpwgt[tmptrainy==1] = 0.5 / posnum
-    tmpwgt[tmptrainy==0] = 0.5 / negnum
+def buildWeightCNN2(ishape, batch_size):
+    ######################
+    # BUILD ACTUAL MODEL #
+    ######################
+    print '... building the model'
+    rng = np.random.RandomState(23455)
     
-    return tmptrainx, tmptrainy, tmpwgt
-
-
-def train(lpinfo_list, batch_size, ishape = (32, 14)):
-    """ Demonstrates lenet on MNIST dataset
-
-    :type learning_rate: float
-    :param learning_rate: learning rate used (factor for the stochastic
-                          gradient)
-
-    :type n_epochs: int
-    :param n_epochs: maximal number of epochs to run the optimizer
-
-    :type dataset: string
-    :param dataset: path to the dataset used for training /testing (MNIST here)
-
-    :type nkerns: list of ints
-    :param nkerns: number of kernels on each layer
-    """
-    usewgt = True
-    learning_rate = 0.1
-    n_epochs = 400
-    showperiod = 800
+    nkerns0 = 4 #kernel number
+    nkerns1 = 8 #kernel number
+    filtersize = 5 #kernel filter size
+    poolsize = 2 #pooling size
+    h_out = 16 #hidden layer output number
     
+    print 'nkerns0:', nkerns0, 'nkerns1:', nkerns1, ', filtersize:', filtersize, ', poolsize:', poolsize, ', h_out:', h_out
+    x = T.matrix('x')   # the data is presented as rasterized images
+    y = T.ivector('y')
+    wgt = T.fvector('wgt')
     
-    if usewgt:
-        print 'training with weighted sample...'
-    else:
-        print 'training without weighted sample...'
-        
-    print 'loading data...'
-    datasets = lpcr_func.get_3sets_data_from_lpinfo_multiscale(lpinfo_list, stdsize=ishape, sizeratio=(5., 0., 1.))
+    # Reshape matrix of rasterized images of shape (batch_size,28*28)
+    # to a 4D tensor, compatible with our LeNetConvPoolLayer
+    layer0_input = x.reshape((batch_size, 1, ishape[0], ishape[1]))
+    layer0 = LeNetConvPoolLayer(rng, input=layer0_input,
+            image_shape=(batch_size, 1, ishape[0], ishape[1]),
+            filter_shape=(nkerns0, 1, filtersize, filtersize), poolsize=(poolsize, poolsize))
+    
+    ishape1 = [(ishape[0]-filtersize+1)/poolsize, (ishape[1]-filtersize+1)/poolsize]
+    print 'ishape1:', ishape1
+    layer1 = LeNetConvPoolLayer(rng, input=layer0.output,
+            image_shape=(batch_size, nkerns0, ishape1[0], ishape1[1]),
+            filter_shape=(nkerns1, nkerns0, filtersize, filtersize), poolsize=(poolsize, poolsize))
+    
+    layer2_input = layer1.output.flatten(2)
+    l2_inputshape = ((ishape1[0] - filtersize + 1) / poolsize, (ishape1[1] - filtersize + 1) / poolsize)
+    l2_input_mod = ((ishape1[0] - filtersize + 1) % poolsize, (ishape1[1] - filtersize + 1) % poolsize)
+    print 'l2_inputshape:', l2_inputshape, l2_input_mod
+    # construct a fully-connected sigmoidal layer
+    layer2 = HiddenLayer(rng, input=layer2_input, n_in=nkerns1 * l2_inputshape[0] * l2_inputshape[1], 
+                         n_out=h_out, activation=T.nnet.sigmoid)
+    
+    # classify the values of the fully-connected sigmoidal layer
+    layer3 = LogisticRegression(input=layer2.output, n_in=h_out, n_out=1)
+    
+    # the cost we minimize during training is the NLL of the model
+    cost_train_wegit = layer3.negative_log_likelihood_weight(y, wgt)
+    cost_train = layer3.negative_log_likelihood(y)
+    
+    cost_test = layer3.negative_log_likelihood_test()
+    
+    params = layer3.params + layer2.params + layer1.params + layer0.params
+
+    return cost_train, cost_train_wegit, params, x, y, wgt, cost_test
+
+
+#def getsamples_scales(lpinfo_list, imgBatchSize, batch_size, minibatch_index):
+#    lpinfo_patch = lpinfo_list[minibatch_index * imgBatchSize:(minibatch_index + 1) * imgBatchSize]
+#    datasets = lpcr_func.get_3sets_data_from_lpinfo_multiscale(lpinfo_patch, stdsize=ishape, sizeratio=(5., 0., 1.))
+#    train_set_x, train_set_y = datasets[0]
+#    valid_set_x, valid_set_y = datasets[1]
+#    test_set_x, test_set_y = datasets[2]
+##        print train_set_x.shape, train_set_y.shape
+#    train_num, train_dim = train_set_x.shape
+#    if train_set_x.shape[0] < batch_size:
+#        addnum = batch_size - train_num
+#        train_set_x = np.append(train_set_x, np.zeros((addnum, train_dim), dtype=train_set_x.dtype), axis=0)
+#        train_set_y = np.append(train_set_y, np.zeros(addnum, dtype=train_set_y.dtype)-1, axis=0)
+#        print 'add data: %d/%d->%d.....'%(batch_size, train_num, addnum)
+##                continue
+##        print train_set_x.shape, train_set_y.shape
+#    tmptrainx = train_set_x[:batch_size, :]
+#    tmptrainy = train_set_y[:batch_size]
+#    posnum = np.sum(tmptrainy==1)
+#    negnum = np.sum(tmptrainy==0)
+#    allnum = posnum + negnum
+##        print posnum, negnum, allnum
+#    tmpwgt = np.zeros_like(tmptrainy, dtype=np.float32)
+#    tmpwgt[tmptrainy==1] = 0.5 / posnum
+#    tmpwgt[tmptrainy==0] = 0.5 / negnum
+#    
+#    return tmptrainx, tmptrainy, tmpwgt
+
+
+def image_batch_training(lpinfo_list_tmp, ishape, batch_size, usewgt, train_model_weight, train_model, test_model, params, cnnparamsfile, sampletype=1):
+    datasets = lpcr_func.get_3sets_data_from_lpinfo_multiscale(lpinfo_list_tmp, stdsize=ishape, sizeratio=(5., 0., 1.), sampletype=sampletype)
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1]
     test_set_x, test_set_y = datasets[2]
@@ -339,15 +365,99 @@ def train(lpinfo_list, batch_size, ishape = (32, 14)):
     
     n_train_batches = train_set_x.shape[0] / batch_size
     n_test_batches = test_set_x.shape[0] / batch_size
-    print 'learning_rate:',learning_rate,', max_epochs:',n_epochs,', batch_size:',batch_size
     print 'n_train_batches:', n_train_batches, ', n_test_batches:', n_test_batches
     
-    cost_train, cost_train_weight, params, x, y, wgt, cost_test = buildWeightCNN(ishape, batch_size)
+    for batchidx in xrange(n_train_batches):
+#            iter = (epoch - 1) * n_train_batches + batchidx
+#            print tmpwgt
+        tmptrainx = train_set_x[batchidx*batch_size:(batchidx+1)*batch_size, :]
+        tmptrainy = train_set_y[batchidx*batch_size:(batchidx+1)*batch_size]
+        if usewgt:
+            tmpwgt1 = wgtall[batchidx*batch_size:(batchidx+1)*batch_size]
+            cost = train_model_weight(tmptrainx, tmptrainy, tmpwgt1)
+        else:
+            cost = train_model(tmptrainx, tmptrainy)
+        
     
-    cnnparamsfile = 'wgtcnn.params.bin'
-    if 1:
-        print 'set model from %s....'%(cnnparamsfile)
-        params_trained = cPickle.load(open(cnnparamsfile, 'rb'))
+#        test_cost = [test_model(test_set_x[tbi*batch_size:(tbi+1)*batch_size, :], test_set_y[tbi*batch_size:(tbi+1)*batch_size]) for tbi in xrange(n_test_batches)]
+    rightnumall = [0, 0]
+    numall = [0, 0]
+    test_cost = 0
+    for tbi in xrange(n_test_batches):
+        tmp_test = test_set_x[tbi*batch_size:(tbi+1)*batch_size, :]
+        tmp_y = test_set_y[tbi*batch_size:(tbi+1)*batch_size]
+        ret = test_model(tmp_test)
+        
+        cost = np.sum(ret[tmp_y==0])
+        cost += np.sum(1.0-ret[tmp_y==1])
+        test_cost += cost
+        
+        posnum = np.sum(tmp_y==1)
+        posret = ret[tmp_y==1]
+        rightposnum = np.sum(posret>0.5)
+        rightnumall[0] += rightposnum
+        numall[0] += posnum
+        
+        negnum = np.sum(tmp_y==0)
+        negret = ret[tmp_y==0]
+        rightnegnum = np.sum(negret<0.5)
+        rightnumall[1] += rightnegnum
+        numall[1] += negnum
+    
+    cPickle.dump(params, open(cnnparamsfile, 'wb'))
+    print 'cnn param is saved into:', cnnparamsfile
+    
+    return numall, rightnumall, test_cost
+    
+
+def train(lpinfo_list, batch_size=100, ishape=(32, 14), nkerns=4, h_out=16, sampletype=1, cnnparamsfile=None, cnnparamsfile_restore=None):
+    """ Demonstrates lenet on MNIST dataset
+
+    :type learning_rate: float
+    :param learning_rate: learning rate used (factor for the stochastic
+                          gradient)
+
+    :type n_epochs: int
+    :param n_epochs: maximal number of epochs to run the optimizer
+
+    :type dataset: string
+    :param dataset: path to the dataset used for training /testing (MNIST here)
+
+    :type nkerns: int
+    :param nkerns: number of kernels on each layer
+    
+    :type h_out: int
+    :param h_out: number of units on hidden layer
+    
+    :type sampletype: int
+    :param sampletype: sampling type
+    """
+    usewgt = True
+    learning_rate = 0.1
+    n_epochs = 100
+    
+    image_num = len(lpinfo_list)
+    image_batch_size = 400
+    image_batch_num = image_num / image_batch_size
+    
+    lpinfo_list_rnd = np.random.permutation(lpinfo_list)
+    
+    if usewgt:
+        print 'training with weighted sample...'
+    else:
+        print 'training without weighted sample...'
+        
+    
+    print 'learning_rate:',learning_rate,', max_epochs:',n_epochs,', batch_size:',batch_size
+    print 'image_batch_size:', image_batch_size, ', image_batch_num:', image_batch_num
+    
+    
+    cost_train, cost_train_weight, params, x, y, wgt, cost_test = buildWeightCNN(ishape, batch_size, nkerns, h_out)
+#    cost_train, cost_train_weight, params, x, y, wgt, cost_test = buildWeightCNN2(ishape, batch_size)
+    
+    if cnnparamsfile_restore is not None:
+        print 'set model from %s....'%(cnnparamsfile_restore)
+        params_trained = cPickle.load(open(cnnparamsfile_restore, 'rb'))
         updates = []
         for param_i, trained_i in zip(params, params_trained):
             updates.append((param_i, trained_i))
@@ -364,6 +474,8 @@ def train(lpinfo_list, batch_size, ishape = (32, 14)):
     for param_i, grad_i in zip(params, grads):
         updates.append((param_i, param_i - learning_rate * grad_i))
     
+    train_model = None
+    train_model_weight = None
     if usewgt:
         train_model_weight = theano.function(inputs=[x, y, wgt], outputs=cost_train_weight, updates=updates)
     else:
@@ -383,51 +495,32 @@ def train(lpinfo_list, batch_size, ishape = (32, 14)):
     epoch = 0
     while epoch < n_epochs:
         epoch = epoch + 1
-        for batchidx in xrange(n_train_batches):
-            
-#            iter = (epoch - 1) * n_train_batches + batchidx
-#            print tmpwgt
-            tmptrainx = train_set_x[batchidx*batch_size:(batchidx+1)*batch_size, :]
-            tmptrainy = train_set_y[batchidx*batch_size:(batchidx+1)*batch_size]
-            if usewgt:
-                tmpwgt1 = wgtall[batchidx*batch_size:(batchidx+1)*batch_size]
-                cost = train_model_weight(tmptrainx, tmptrainy, tmpwgt1)
-            else:
-                cost = train_model(tmptrainx, tmptrainy)
-            
-        
-#        test_cost = [test_model(test_set_x[tbi*batch_size:(tbi+1)*batch_size, :], test_set_y[tbi*batch_size:(tbi+1)*batch_size]) for tbi in xrange(n_test_batches)]
-        rightnumall = [0, 0]
         numall = [0, 0]
+        rightnumall = [0, 0]
         test_cost = 0
-        for tbi in xrange(n_test_batches):
-            tmp_test = test_set_x[tbi*batch_size:(tbi+1)*batch_size, :]
-            tmp_y = test_set_y[tbi*batch_size:(tbi+1)*batch_size]
-            ret = test_model(tmp_test)
+        for img_batchidx in xrange(image_batch_num):
             
-            cost = np.sum(ret[tmp_y==0])
-            cost += np.sum(1.0-ret[tmp_y==1])
-            test_cost += cost
+            if img_batchidx == image_batch_num-1:
+                lpinfo_list_tmp = lpinfo_list_rnd[img_batchidx*image_batch_size:]
+            else:
+                lpinfo_list_tmp = lpinfo_list_rnd[img_batchidx*image_batch_size:(img_batchidx+1)*image_batch_size]
+            print 'loading batch image set data %d/%d, num:%d...'%(img_batchidx+1, image_batch_num, len(lpinfo_list_tmp))
+            numallone, rightnumallone, test_costone = \
+                                image_batch_training(lpinfo_list_tmp, ishape, batch_size, \
+                                usewgt, train_model_weight, train_model, test_model, params, cnnparamsfile, sampletype)
+            numall[0] += numallone[0]
+            numall[1] += numallone[1]
+            rightnumall[0] += rightnumallone[0]
+            rightnumall[1] += rightnumallone[1]
+            test_cost += test_costone
+            print '++++ img_batch:%d/%d'%(img_batchidx+1, image_batch_num), \
+                '+:%d/%d -:%d/%d'%(rightnumallone[0], numallone[0], rightnumallone[1], numallone[1]), \
+                'test_cost:%.6f'%(test_costone/np.sum(numallone))
             
-            posnum = np.sum(tmp_y==1)
-            posret = ret[tmp_y==1]
-            rightposnum = np.sum(posret>0.5)
-            rightnumall[0] += rightposnum
-            numall[0] += posnum
-            
-            negnum = np.sum(tmp_y==0)
-            negret = ret[tmp_y==0]
-            rightnegnum = np.sum(negret<0.5)
-            rightnumall[1] += rightnegnum
-            numall[1] += negnum
-        
-        cPickle.dump(params, open(cnnparamsfile, 'wb'))
-        print 'cnn param is saved into:', cnnparamsfile
-        
-        print 'epoch:%d/%d'%(epoch, n_epochs), \
+        print '---------- epoch:%d/%d'%(epoch, n_epochs), \
             '+:%d/%d -:%d/%d'%(rightnumall[0], numall[0], rightnumall[1], numall[1]), \
             'test_cost:%.6f'%(test_cost/np.sum(numall))
-        
+        print
 #        print 'epoch:%d/%d'%(epoch, n_epochs), '  test_cost:', np.mean(test_cost)
     
     end_time = time.clock()
@@ -438,12 +531,11 @@ def train(lpinfo_list, batch_size, ishape = (32, 14)):
 
 
 
-def fillObsChain(lpinfo_list, stdsize):
+def fillObsChain(lpinfo_list, stdsize, nkerns=4, h_out=16, sampletype=1, cnnparamsfile=None):
     print 'fill the obs_chain using scnn...'
     
-    cnnparamsfile = 'wgtcnn.params.bin'
     params_trained = cPickle.load(open(cnnparamsfile, 'rb'))
-    cost_train, cost_train_weight, params, x, y, wgt, cost_test = buildWeightCNN(stdsize, 1)
+    cost_train, cost_train_weight, params, x, y, wgt, cost_test = buildWeightCNN(stdsize, 1, nkerns, h_out)
     
     print 'set model from %s....'%(cnnparamsfile)
     
@@ -478,16 +570,17 @@ def fillObsChain(lpinfo_list, stdsize):
 #            cv2.imshow('rsz', imgvec.reshape(stdsize))
 #            cv2.waitKey(0)
         lp.charobj.obs_chain = obs_chain
-        allimg = gimg / 2 + mask / 2
-        cv2.imshow('result', allimg)
-        cv2.waitKey(40)
+        if 0:
+            allimg = gimg / 2 + mask / 2
+            cv2.imshow('result', allimg)
+            cv2.waitKey(10)
         
 #        break
 
 
 
-def saveCNNParam2TXT():
-    cnnparamsfile = 'wgtcnn.params.bin'
+def saveCNNParam2TXT(prefix, cnnparamsfile = 'wgtcnn.params.bin'):
+    
     params_trained = cPickle.load(open(cnnparamsfile, 'rb'))
     cnnparamstxt = cnnparamsfile + '.txt'
     txtfile = open(cnnparamstxt, 'w')
@@ -498,7 +591,7 @@ def saveCNNParam2TXT():
         lshape = len(data.shape)
         if lshape == 1:
             txtfile.write('//dim:%d\n'%(data.shape[0]))
-            txtfile.write('float gafParams%d_[%d] = '%(tdi, data.shape[0]))
+            txtfile.write('float gafParams%s%d_[%d] = '%(prefix, tdi, data.shape[0]))
             txtfile.write('{')
             for ri in xrange(data.shape[0]):
                 odtxt = '%.6ff'%(data[ri])
@@ -511,7 +604,7 @@ def saveCNNParam2TXT():
         if lshape == 2:
             data = data.T
             txtfile.write('//dim:%dx%d\n'%(data.shape[0], data.shape[1]))
-            txtfile.write('float gafParams%d_[%d] = '%(tdi, data.shape[0] * data.shape[1]))
+            txtfile.write('float gafParams%s%d_[%d] = '%(prefix, tdi, data.shape[0] * data.shape[1]))
             txtfile.write('{')
             for ri in xrange(data.shape[0]):
 #                txtfile.write('{')
@@ -529,7 +622,7 @@ def saveCNNParam2TXT():
         
         if lshape == 4:
             txtfile.write('//dim:%dx%dx%dx%d\n'%(data.shape[0], data.shape[1], data.shape[2], data.shape[3]))
-            txtfile.write('float gafParams%d_[%d] = '%(tdi, data.shape[0] * data.shape[1] * data.shape[2] * data.shape[3]))
+            txtfile.write('float gafParams%s%d_[%d] = '%(prefix, tdi, data.shape[0] * data.shape[1] * data.shape[2] * data.shape[3]))
             txtfile.write('{')            
             for d0 in xrange(data.shape[0]):
 #                txtfile.write('{')

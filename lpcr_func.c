@@ -117,11 +117,12 @@ int chknegpostag(int adwBBS[4], int *pdwCHBBS, int dwCHBBSLen)
         dwDistY = abs(dwY1 - dwY2);
         dwDistH = dwH1 - dwH2;
         
-        if (dwDistX * 4 <= dwW2 && dwDistY == 0 && dwDistH >= 0 && dwDistH * 6 <= dwH2) {
+     //   if (dwDistX * 5 <= dwW2 && dwDistY == 0 && dwDistH >= 0 && dwDistH * 6 <= dwH2) {
+        if (dwDistX * 5 <= dwW2 && dwDistY == 0 && dwDistH >= 0 && dwDistH * 7 <= dwH1) {
             dwPos = 1;
             break;
         }
-        else if (dwDistX * 3 <= dwW2 && dwDistY * 3 <= dwH2 && dwDistH * 3 <= dwH2) {
+        else if (dwDistX * 4 <= dwW2 && dwDistY * 3 <= dwH2 && dwDistH * 3 <= dwH2) {
             dwIllegal = 1;
             break;
         }
@@ -152,11 +153,14 @@ int getsamples(uchar *pubyImage, int dwImgW, int dwImgH,
     int dwVecLen = dwStdW * dwStdH;
     int dwTag;
     int dwNegStepW = dwImgW / 20, dwNegStepH = dwImgH / 10;
+    int dwCentY, dwStdHalfH;
     
     pfImagePatch = (float*)malloc(dwVecLen * sizeof(float));
     pubyImagePatch = (uchar*)malloc(dwVecLen);
     
- //   printf("dwImgW:%d, dwImgH:%d, dwStdW:%d, dwStdH:%d\n", dwImgW, dwImgH, dwStdW, dwStdH);
+    dwCentY = (pdwLPBBS[3] + pdwLPBBS[1]) / 2;
+    dwStdHalfH = dwStdH / 2;
+//    printf("dwImgW:%d, dwImgH:%d, dwStdW:%d, dwStdH:%d, LPBBS:%d,%d,%d,%d\n", dwImgW, dwImgH, dwStdW, dwStdH, pdwLPBBS[0], pdwLPBBS[1], pdwLPBBS[2], pdwLPBBS[3]);
     for (dwRI = 0; dwRI < dwImgH - dwStdH; dwRI += 2) {
         for (dwCI = 0; dwCI < dwImgW - dwStdW; dwCI += 2) {
             adwBBSNow[0] = dwCI;
@@ -171,7 +175,12 @@ int getsamples(uchar *pubyImage, int dwImgW, int dwImgH,
             }
             
             if (dwTag == 0) {
-                if (dwRI % dwNegStepH != 0 || dwCI % dwNegStepW != 0 || rand() < 0.5f * RAND_MAX) {
+                if(abs(dwRI + dwStdHalfH - dwCentY) > 2 || dwCI < pdwLPBBS[0] || dwCI > pdwLPBBS[2]) {
+                    if (dwRI % dwNegStepH != 0 || dwCI % dwNegStepW != 0 || rand() < 0.7f * RAND_MAX) {
+                        continue;
+                    }
+                }
+                else if (rand() < 0.7f * RAND_MAX) {
                     continue;
                 }
             }
@@ -185,6 +194,15 @@ int getsamples(uchar *pubyImage, int dwImgW, int dwImgH,
          //   }
             
             normalize_img_data_to_0_1(pubyImagePatch, pfImagePatch, dwVecLen, 10);
+            
+            memcpy(pfSampleList + dwSampleNumNow * dwVecLen, pfImagePatch, dwVecLen * sizeof(float));
+            pdwTagList[dwSampleNumNow] = dwTag;
+            dwSampleNumNow++;
+            
+            //add invert sample
+            for (dwBRI = 0; dwBRI < dwVecLen; dwBRI++) {
+                pfImagePatch[dwBRI] = 1.0 - pfImagePatch[dwBRI];
+            }
             
             memcpy(pfSampleList + dwSampleNumNow * dwVecLen, pfImagePatch, dwVecLen * sizeof(float));
             pdwTagList[dwSampleNumNow] = dwTag;
@@ -237,8 +255,8 @@ int getsamples_scales(uchar *pubyImage, int dwImgW, int dwImgH,
     
     for (dwI = 0; dwI < MAX_SCALES_NUM; dwI++) {
         fScaleNow = afScales[dwI];
-        dwRSZImgW = (int)(dwImgW * fScaleNow);
-        dwRSZImgH = (int)(dwImgH * fScaleNow);
+        dwRSZImgW = (int)(dwImgW * fScaleNow + 0.5f);
+        dwRSZImgH = (int)(dwImgH * fScaleNow + 0.5f);
         
         if (dwRSZImgH < dwStdH) {
         //    printf("getsamples_scales: over the dwStdH. \n");
@@ -251,12 +269,12 @@ int getsamples_scales(uchar *pubyImage, int dwImgW, int dwImgH,
      //   }
      //   break;
         for (dwPI = 0; dwPI < dwLPBBSLen; dwPI++) {
-            pdwLPBBS_RSZ[dwPI] = (int)(pdwLPBBS[dwPI] * fScaleNow);
+            pdwLPBBS_RSZ[dwPI] = (int)(pdwLPBBS[dwPI] * fScaleNow + 0.5f);
         //    printf("%d, ", pdwLPBBS_RSZ[dwPI]);
         }
         //printf("\n");
         for (dwPI = 0; dwPI < dwCHBBSLen; dwPI++) {
-            pdwCHBBS_RSZ[dwPI] = (int)(pdwCHBBS[dwPI] * fScaleNow);
+            pdwCHBBS_RSZ[dwPI] = (int)(pdwCHBBS[dwPI] * fScaleNow + 0.5f);
         //    printf("%d, ", pdwCHBBS_RSZ[dwPI]);
         }
         //printf("\n");
@@ -285,5 +303,187 @@ int getsamples_scales(uchar *pubyImage, int dwImgW, int dwImgH,
     
     return 0;
 }
+
+
+/////////////////////////
+
+
+int chknegpostag_in_out(int adwBBS[4], int *pdwLPBBS, int dwLPBBSLen)
+{
+    int dwPI;
+    int dwPos = 0, dwIllegal = 0;
+    int dwH1, dwW1, dwX1, dwY1, dwX2, dwY2, dwH2, dwW2;
+    int dwDistX, dwDistY, dwDistH;
+    int dwTag;
+    
+    dwH1 = (adwBBS[3] - adwBBS[1]) / 2;
+    dwW1 = (adwBBS[2] - adwBBS[0]) / 2;
+    dwX1 = (adwBBS[0] + adwBBS[2]) / 2;
+    dwY1 = (adwBBS[1] + adwBBS[3]) / 2;
+    
+    dwX2 = (pdwLPBBS[0] + pdwLPBBS[2]) / 2;
+    dwY2 = (pdwLPBBS[1] + pdwLPBBS[3]) / 2;
+    dwH2 = (pdwLPBBS[3] - pdwLPBBS[1]) / 2;
+    dwW2 = (pdwLPBBS[2] - pdwLPBBS[0]) / 2;
+    
+    dwDistX = abs(dwX1 - dwX2);
+    dwDistY = abs(dwY1 - dwY2);
+    dwDistH = dwH1 - dwH2;
+    
+    dwTag = -1;
+    
+    if (dwDistY <= 1 && dwDistH <= 2 && dwDistH >= 0) {
+        if (abs(dwDistX - dwW2) < dwW1 / 4) {
+            dwTag = 1;
+        }
+        else if (abs(dwDistX - dwW2) > dwW1) {
+            dwTag = 0;
+        }
+    }
+    
+    
+    return dwTag;
+}
+
+
+int getsamples_in_out(uchar *pubyImage, int dwImgW, int dwImgH,
+               int *pdwLPBBS, int dwLPBBSLen, int dwStdW, int dwStdH,
+               float *pfSampleList, int *pdwTagList, int *pdwSampleNum)
+{
+    int dwRI, dwCI, dwBRI, dwBCI;
+    int dwSampleNumMax = *pdwSampleNum;
+    int adwBBSNow[4];
+    float *pfImagePatch = 0;
+    uchar *pubyImagePatch = 0;
+    int dwSampleNumNow = 0;
+    int dwVecLen = dwStdW * dwStdH;
+    int dwTag;
+    
+    pfImagePatch = (float*)malloc(dwVecLen * sizeof(float));
+    pubyImagePatch = (uchar*)malloc(dwVecLen);
+    
+    //    printf("dwImgW:%d, dwImgH:%d, dwStdW:%d, dwStdH:%d, LPBBS:%d,%d,%d,%d\n", dwImgW, dwImgH, dwStdW, dwStdH, pdwLPBBS[0], pdwLPBBS[1], pdwLPBBS[2], pdwLPBBS[3]);
+    for (dwRI = 0; dwRI < dwImgH - dwStdH; dwRI += 2) {
+        for (dwCI = 0; dwCI < dwImgW - dwStdW; dwCI += 2) {
+            adwBBSNow[0] = dwCI;
+            adwBBSNow[1] = dwRI;
+            adwBBSNow[2] = dwCI + dwStdW;
+            adwBBSNow[3] = dwRI + dwStdH;
+            
+            dwTag = chknegpostag_in_out(adwBBSNow, pdwLPBBS, dwLPBBSLen);
+            
+            if (dwTag == -1) {
+                continue;
+            }
+            
+            
+            for (dwBRI = dwRI; dwBRI < dwRI + dwStdH; dwBRI++) {
+                memcpy(pubyImagePatch + (dwBRI - dwRI) * dwStdW, pubyImage + dwBRI * dwImgW + dwCI, dwStdW);
+            }
+            
+            //   for (dwBCI = 0; dwBCI < dwVecLen; dwBCI++) {
+            //       pfImagePatch[dwBCI] = pubyImagePatch[dwBCI];
+            //   }
+            
+            normalize_img_data_to_0_1(pubyImagePatch, pfImagePatch, dwVecLen, 10);
+            
+            memcpy(pfSampleList + dwSampleNumNow * dwVecLen, pfImagePatch, dwVecLen * sizeof(float));
+            pdwTagList[dwSampleNumNow] = dwTag;
+            dwSampleNumNow++;
+            
+            
+            //add invert sample
+            for (dwBRI = 0; dwBRI < dwVecLen; dwBRI++) {
+                pfImagePatch[dwBRI] = 1.0 - pfImagePatch[dwBRI];
+            }
+            
+            memcpy(pfSampleList + dwSampleNumNow * dwVecLen, pfImagePatch, dwVecLen * sizeof(float));
+            pdwTagList[dwSampleNumNow] = dwTag;
+            dwSampleNumNow++;
+            
+            if (dwSampleNumNow >= dwSampleNumMax) {
+                printf("getsamples: over the max sample number.\n");
+                break;
+            }
+        }
+        if (dwSampleNumNow >= dwSampleNumMax) {
+            break;
+        }
+    }
+    
+    //   printf("pdwCHBBS:%d, %d, dwSampleNumNow:%d\n", pdwCHBBS[2]-pdwCHBBS[0], pdwCHBBS[3]-pdwCHBBS[1], dwSampleNumNow);
+    
+    *pdwSampleNum = dwSampleNumNow;
+    
+    free(pubyImagePatch);
+    free(pfImagePatch);
+    
+    return 0;
+}
+
+
+int getsamples_scales_in_out(uchar *pubyImage, int dwImgW, int dwImgH,
+                      int *pdwLPBBS, int dwLPBBSLen, int dwStdW, int dwStdH,
+                      float *pfSampleList, int *pdwTagList, int *pdwSampleNum)
+{
+#define MAX_SCALES_NUM 20
+    int dwI, dwPI;
+    float afScales[MAX_SCALES_NUM], fScaleNow;
+    uchar *pubyRSZImage = 0;
+    int dwRSZImgW, dwRSZImgH;
+    int *pdwLPBBS_RSZ = 0;
+    int dwSampleNumMax = *pdwSampleNum;
+    int dwSampleNumAll = 0, dwSampleNumNow = 0;
+    int dwVecLen = dwStdW * dwStdH;
+    
+    afScales[0] = 1.0f;
+    for (dwI = 1; dwI < MAX_SCALES_NUM; dwI++) {
+        afScales[dwI] = afScales[dwI-1] * 0.95f;
+    }
+    
+    pubyRSZImage = (uchar*)malloc(dwImgH * dwImgW);
+    pdwLPBBS_RSZ = (int*)malloc(dwLPBBSLen * sizeof(int));
+    
+    for (dwI = 0; dwI < MAX_SCALES_NUM; dwI++) {
+        fScaleNow = afScales[dwI];
+        dwRSZImgW = (int)(dwImgW * fScaleNow + 0.5f);
+        dwRSZImgH = (int)(dwImgH * fScaleNow + 0.5f);
+        
+        if (dwRSZImgH < dwStdH) {
+            //    printf("getsamples_scales: over the dwStdH. \n");
+            break;
+        }
+        
+        imgResize(pubyImage, dwImgW, dwImgH, pubyRSZImage, dwRSZImgW, dwRSZImgH);
+        
+        for (dwPI = 0; dwPI < dwLPBBSLen; dwPI++) {
+            pdwLPBBS_RSZ[dwPI] = (int)(pdwLPBBS[dwPI] * fScaleNow + 0.5f);
+            //    printf("%d, ", pdwLPBBS_RSZ[dwPI]);
+        }
+        
+        dwSampleNumNow = dwSampleNumMax - dwSampleNumAll;
+        getsamples_in_out(pubyRSZImage, dwRSZImgW, dwRSZImgH, pdwLPBBS_RSZ, dwLPBBSLen,
+                   dwStdW, dwStdH, pfSampleList + dwSampleNumAll * dwVecLen, pdwTagList + dwSampleNumAll, &dwSampleNumNow);
+        dwSampleNumAll += dwSampleNumNow;
+        
+        if (dwSampleNumAll >= dwSampleNumMax) {
+            printf("getsamples_scales: over maximum sample number.\n");
+            break;
+        }
+    }
+    
+    //   for (dwPI = 0; dwPI < dwVecLen; dwPI++) {
+    //       printf("%.3f, ", pfSampleList[dwPI]);
+    //    }
+    //    printf("\n");
+    
+    *pdwSampleNum = dwSampleNumAll;
+    
+    free(pubyRSZImage);
+    free(pdwLPBBS_RSZ);
+    
+    return 0;
+}
+
 
 

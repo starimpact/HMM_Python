@@ -14,7 +14,6 @@ import cPickle
 import ctypes
 import showdata
 import theano
-import whitening
 from ctypes import *
 
 lpcr_func_c = ctypes.CDLL('lpcr_func_c.so')
@@ -45,8 +44,30 @@ def getsamples_scales_c(lpimg, newbbs, newchbbs, stdsize, sample_maxnum):
     return samples_list, tags_list
 
 
-def get_3sets_data_from_lpinfo_multiscale(lpinfolist, stdsize=(32, 14), sizeratio=(1.,1.,1.)):
-    datalist = load_lpcrdata_from_lpinfo_multiscale_pos_neg(lpinfolist, stdsize)
+def getsamples_in_out_scales_c(lpimg, newbbs, stdsize, sample_maxnum):
+    lpcr_func_c.getsamples_scales_in_out.argtypes = \
+        [POINTER(c_ubyte), c_int , c_int, POINTER(c_int), c_int, \
+        c_int, c_int, POINTER(c_float), POINTER(c_int), POINTER(c_int)]
+    imgh, imgw = lpimg.shape
+    newbbs_tmp = np.asarray(newbbs, dtype=np.int32)
+    newbbs_len = newbbs_tmp.shape[0]
+    stdh, stdw = stdsize
+    sample_maxnum_tmp = np.asarray(sample_maxnum, dtype=np.int32)
+    samples = np.zeros((sample_maxnum, stdh*stdw), dtype=np.float32)
+    tags = np.zeros(sample_maxnum, dtype=np.int32)
+    lpcr_func_c.getsamples_scales_in_out(lpimg.ctypes.data_as(POINTER(c_ubyte)), imgw, imgh, \
+                        newbbs_tmp.ctypes.data_as(POINTER(c_int)), newbbs_len, \
+                        stdw, stdh, \
+                        samples.ctypes.data_as(POINTER(c_float)), tags.ctypes.data_as(POINTER(c_int)), \
+                        sample_maxnum_tmp.ctypes.data_as(POINTER(c_int)))
+    samples_list = samples[:sample_maxnum_tmp, :].tolist()
+    tags_list = tags[:sample_maxnum_tmp].tolist()
+    
+    return samples_list, tags_list
+
+
+def get_3sets_data_from_lpinfo_multiscale(lpinfolist, stdsize=(32, 14), sizeratio=(1.,1.,1.), sampletype=1):
+    datalist = load_lpcrdata_from_lpinfo_multiscale_pos_neg(lpinfolist, stdsize, sampletype)
     train_set, valid_set, test_set = get_3sets_data_noshared(datalist, sizeratio)
     return train_set, valid_set, test_set
 
@@ -190,7 +211,10 @@ def getsamples_scales(lpimg, lpbbs, chbbs, stdsize):
 
 
 
-def load_lpcrdata_from_lpinfo_multiscale_pos_neg(lpinfolist, stdsize=(32, 14)):
+def load_lpcrdata_from_lpinfo_multiscale_pos_neg(lpinfolist, stdsize=(32, 14), sampletype=1):
+    """
+    sampletype: 1 or 2
+    """
     datalist = []
     imgvecall = []
     tagall = []
@@ -200,10 +224,11 @@ def load_lpcrdata_from_lpinfo_multiscale_pos_neg(lpinfolist, stdsize=(32, 14)):
 #        print gimg.flags
         chbbs = lp.char_bndbox
         bbs = lp.lp_bndbox
-        margin = (bbs[3]-bbs[1]) / 2;
+        margin = (bbs[3]-bbs[1]) / 2
+        marginw = (bbs[2]-bbs[0]) / 2
 #        print bbs, gimg.shape
-        bbs2 = [np.max([0, bbs[0]-margin]), np.max([0, bbs[1]-margin]), 
-                np.min([gimg.shape[1]-1, bbs[2]+margin]), np.min([gimg.shape[0]-1, bbs[3]+margin])]
+        bbs2 = [np.max([0, bbs[0]-marginw]), np.max([0, bbs[1]-margin]), 
+                np.min([gimg.shape[1]-1, bbs[2]+marginw]), np.min([gimg.shape[0]-1, bbs[3]+margin])]
 #        print chbbs[0][:2], chbbs[-1][2:]
         chrns = lp.char_name
         newchbbs = []
@@ -220,33 +245,37 @@ def load_lpcrdata_from_lpinfo_multiscale_pos_neg(lpinfolist, stdsize=(32, 14)):
 #        print newchbbs
 #        print newbbs
         
-        if 0:
-            clpimg = np.zeros((lpimg.shape[0], lpimg.shape[1], 3), dtype=np.uint8)
-            clpimg[:, :, 0] = lpimg
-            clpimg[:, :, 1] = lpimg
-            clpimg[:, :, 2] = lpimg
-            cv2.rectangle(clpimg, (newbbs[0], newbbs[1]), (newbbs[2], newbbs[3]), [0, 255, 0])
-            for bb in newchbbs:
-                cv2.rectangle(clpimg, (bb[0], bb[1]), (bb[2], bb[3]), [0, 0, 255])
-            cv2.imshow('hi', clpimg)
-            cv2.waitKey(40)
+#        if 0:
+#            clpimg = np.zeros((lpimg.shape[0], lpimg.shape[1], 3), dtype=np.uint8)
+#            clpimg[:, :, 0] = lpimg
+#            clpimg[:, :, 1] = lpimg
+#            clpimg[:, :, 2] = lpimg
+#            cv2.rectangle(clpimg, (newbbs[0], newbbs[1]), (newbbs[2], newbbs[3]), [0, 255, 0])
+#            for bb in newchbbs:
+#                cv2.rectangle(clpimg, (bb[0], bb[1]), (bb[2], bb[3]), [0, 0, 255])
+#            cv2.imshow('hi', clpimg)
+#            cv2.waitKey(0)
         
         
         if 0:
             veclist, taglist = getsamples_scales(lpimg, newbbs, newchbbs, stdsize)
-        else:
-            veclist, taglist = getsamples_scales_c(lpimg, newbbs, newchbbs, stdsize, 1000)
+        elif sampletype==1: #get char sample, sampletype=1
+            veclist, taglist = getsamples_scales_c(lpimg, newbbs, newchbbs, stdsize, 10000)
+        elif sampletype==2: #get sample which are or aren't left and right border of license plate, sampletype=2
+            veclist, taglist = getsamples_in_out_scales_c(lpimg, newbbs, stdsize, 10000)
 #        print lpimg.flags
 #        cv2.imshow('lpimg', lpimg)
 #        cv2.waitKey(0)
+#        print len(taglist)
 #        for fimgvec, tag in zip(veclist, taglist):
-#            print tag
-#            imgvec = np.asarray(fimgvec)
-#            imgvec *= 255
-#            imgvec = imgvec.astype(np.uint8)
-#            imgvec = imgvec.reshape(stdsize)
-#            cv2.imshow('rsz', imgvec)
-#            cv2.waitKey(0)
+#            if tag==1:
+#                print tag
+#                imgvec = np.asarray(fimgvec)
+#                imgvec *= 255
+#                imgvec = imgvec.astype(np.uint8)
+#                imgvec = imgvec.reshape(stdsize)
+#                cv2.imshow('rsz', imgvec)
+#                cv2.waitKey(0)
             
 #        taglistarray = np.asarray(taglist)
 #        posnum = np.sum(taglistarray==1)

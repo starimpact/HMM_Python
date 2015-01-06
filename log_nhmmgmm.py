@@ -81,7 +81,7 @@ class siLogGSM:
         gsmTXT = 'const float gafMean_%s[%d] = '%(prestr, meanlen)
         gsmTXT += '{'
         for mi in xrange(meanlen):
-            gsmTXT += '%.5ff'%(self.__mean[mi])
+            gsmTXT += '%.5ef'%(self.__mean[mi])
             if mi < meanlen-1:
                 gsmTXT += ', '
         gsmTXT += '};\n\n'
@@ -99,7 +99,7 @@ class siLogGSM:
         for cri in xrange(meanlen):
 #            gsmTXT += '{'
             for cci in xrange(meanlen):
-                gsmTXT += '%.5ff'%(self.__invconvariance[cri, cci])
+                gsmTXT += '%.5ef'%(self.__invconvariance[cri, cci])
                 if cci < meanlen-1:
                     gsmTXT += ', '
 #            gsmTXT += '}'
@@ -178,7 +178,7 @@ class siLogGMM:
         gmtxt = 'const float gafWgtList_%s[%d] = '%(prestr, gmnum)
         gmtxt += '{'
         for gi in xrange(gmnum):
-            gmtxt += '%.5ff'%(self.__wgtlist[gi])
+            gmtxt += '%.5ef'%(self.__wgtlist[gi])
             if gi < gmnum-1:
                 gmtxt += ', '
         gmtxt += '};\n\n'

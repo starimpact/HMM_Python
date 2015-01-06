@@ -266,8 +266,11 @@ def extract_lpinfo(lpinfo, rszh = 32, ifstrech=True):
 #    zero_col_mark = np.sum(sblimg, axis=0)==0
 #    sblimg[:, zero_col_mark] = np.random.randint(0, 4, (resizehight, np.sum(zero_col_mark)))
 #    sblimg = funcs.siSobelX_U8(strechimg)
-    allimg = np.append(strechimg, sblimg, axis=1)
-    cv.imshow('img', allimg)
+    
+    if 0:
+        allimg = np.append(strechimg, sblimg, axis=1)
+        cv.imshow('img', allimg)
+        cv.waitKey(10)
     
     #calc new bound box
     lpinfo.charobj.lp_bndbox = calc_newbb(lpinfo.lp_bndbox, bb)
@@ -279,7 +282,7 @@ def extract_lpinfo(lpinfo, rszh = 32, ifstrech=True):
     for i, bbone in enumerate(lpinfo.char_bndbox):
         bbnew = calc_newbb(bbone, bb)
         for i in xrange(len(bbnew)):
-            bbnew[i] = np.int(bbnew[i] * resizerate)
+            bbnew[i] = np.int(bbnew[i] * resizerate + 0.5)
         lpinfo.charobj.charbbs.append(bbnew)
     
     #show the char boundbox of LP
@@ -300,7 +303,7 @@ def extract_lpinfo(lpinfo, rszh = 32, ifstrech=True):
     lpinfo.charobj.obs_chain = np.asarray(obs_chain, dtype=np.int32)
 #    print obs_chain
     
-    cv.waitKey(10)
+    
 
 
 def row_normalize(data):

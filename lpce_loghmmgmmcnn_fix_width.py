@@ -11,24 +11,23 @@ import lpfunctions as lpfuncs
 import functions as funcs
 import cv2 as cv
 import log_nhmmgmm as lognhgmm
-import cPickle 
-import simpleCNN as scnn
+import cPickle
 import weightCNN as wgtcnn
 import time
 
 maxiter = 10
 gmm_maxiter = 100
-neednum = 2000
+neednum = 400
 gmmsize = 4
-hmmgmmfile = 'lp_loghmmgmm(20141225.1)_hmmmaxiter[' + str(maxiter) + ']_samplenum[' + str(neednum) + ']_gmmsize[' + str(gmmsize) + ']_gmmmaxiter[' + str(gmm_maxiter) + ']' + '.bin'
+hmmgmmfile = 'lp_loghmmgmm(2014129.2)_hmmmaxiter[' + str(maxiter) + ']_samplenum[' + str(neednum) + ']_gmmsize[' + str(gmmsize) + ']_gmmmaxiter[' + str(gmm_maxiter) + ']' + '.bin'
 #folderpath = '/Users/mzhang/work/LP Data2/'
-folderpath = '/Volumes/ZMData1/LPR_TrainData/new/'
-neednum2 = 30
-folderpath2 = '/Volumes/ZMData1/LPR_TrainData/old/'
+folderpath = '/Users/mzhang/work/LPR_TrainData/new/'
+neednum2 = 0
+folderpath2 = '/Users/mzhang/work/LPR_TrainData/old/'
 samplestep = 1
-stdshape = (28, 14)
+stdshape = (28, 14) #(28, 32) #(28, 14)
 gmmvecdim = 8
-#neednum = 4
+#neednum = 100
 trainnum = neednum + neednum2 # - 4000
 teststart = 0 #neednum - 4000
 
@@ -72,14 +71,25 @@ def get_mean_cov(datavec):
 #    pl.show()
     
     
-def initGMMParams(data, gmnum=1, maxiter=50):
+def initGMMParams(data, gmnum=1, maxiter=50, trainratio=1.0):
     datalen = data.shape[1]
+    
+    #get half samples to train.
+    print 'get', trainratio, 'data to train:', datalen, '->',
+    dataT = data.T
+    dataT = np.random.permutation(dataT)
+    neednum = np.int(datalen * trainratio)
+    subdataT = dataT[:neednum, :]
+    subdata = subdataT.T
+    datalen = subdata.shape[1]
+    print datalen
+    
     partlen = datalen / gmnum
     gsmlist = []
     wgtlist = []
     initwgt = 1.0 / gmnum
     for i in xrange(gmnum):
-        partdata = data[:, i * partlen:(i + 1) * partlen]
+        partdata = subdata[:, i * partlen:(i + 1) * partlen]
         mean, cov = get_mean_cov(partdata)
         gsm = lognhgmm.siLogGSM(mean, cov)
         gsmlist.append(gsm)
@@ -87,7 +97,7 @@ def initGMMParams(data, gmnum=1, maxiter=50):
 #        print 'num:', data.shape[0], 'mean:', mean, 'sigma:', cov
     gmm = lognhgmm.siLogGMM(gsmlist, wgtlist)
     
-    gmm.train(data, maxiter)
+    gmm.train(subdata, maxiter)
     
 #    print_info_0(data)
 #    exit()
@@ -107,7 +117,7 @@ def getInitailParamsFromSamplesGMM(lpinfo_list, gmmsize=1):
         snum = tmp.shape[1]
         dimnum = tmp.shape[0]
         print 'state:%s samplenum:%d/%d'%(key, snum, n_num)
-        if dimnum * 10 > snum: # filter the small size set of the state
+        if dimnum * 40 > snum: # filter the small size set of the state
             break
         state_num += 1
         datadict_new[key] = tmp
@@ -144,7 +154,10 @@ def getInitailParamsFromSamplesGMM(lpinfo_list, gmmsize=1):
     for key in datadict:
         data = datadict[key]
         print 'proceeding state:', key, '...', '(iter:%d, size:%dx%d)'%(gmm_maxiter, data.shape[0], data.shape[1])
-        gmm = initGMMParams(data, gmmsize, gmm_maxiter)
+        trainratio = 0.75
+        if key==0:
+            trainratio = 0.25
+        gmm = initGMMParams(data, gmmsize, gmm_maxiter, trainratio=trainratio)
         gmm.printWeights()
         print
         gmm_list.append(gmm)
@@ -153,51 +166,49 @@ def getInitailParamsFromSamplesGMM(lpinfo_list, gmmsize=1):
 
 
 def doReadHMM_AdjustStateNum(hmmfile, statenum=-1):
-        """
-        satenum: -1 means no change
-        """
-        
-        hmm = lognhgmm.siLogNHMMGMM()
-        hmm.read(hmmfile)
-        
-        
-        if statenum < 0:
-            return hmm
-        
-        print 'fixed width:', statenum-1
-        
-        prior_state, trans_mat, gmm_list = hmm.getparams()
-        n_state = len(prior_state)
-        print 'total state number:', n_state
-        
-        if n_state < statenum:
-            print 'error! only has %d states, but you need %d states.'%(n_state, statenum)
-            return hmm
-        
-        prior_state = np.zeros(statenum)
-        prior_state[0] = 1.0
-        prior_state[1:] = (1-prior_state[0]) / (statenum-1)
-        trans_mat = np.zeros((statenum, statenum))
-        for i in xrange(statenum-1):
-            trans_mat[i, i+1] = 1.0
-        trans_mat[0, 0] = 0.5
-        trans_mat[0, 1] = 0.5
-        trans_mat[statenum-1, 0] = 0.5
-        trans_mat[statenum-1, 1] = 0.5
+    """
+    satenum: -1 means no change
+    """
+    
+    hmm = lognhgmm.siLogNHMMGMM()
+    hmm.read(hmmfile)
+    
+    
+    if statenum < 0:
+        return hmm
+    
+    print 'fixed width:', statenum-1
+    
+    prior_state, trans_mat, gmm_list = hmm.getparams()
+    n_state = len(prior_state)
+    print 'total state number:', n_state
+    
+    if n_state < statenum:
+        print 'error! only has %d states, but you need %d states.'%(n_state, statenum)
+        return hmm
+    
+    prior_state = np.zeros(statenum)
+    prior_state[0] = 1.0
+    prior_state[1:] = (1-prior_state[0]) / (statenum-1)
+    trans_mat = np.zeros((statenum, statenum))
+    for i in xrange(statenum-1):
+        trans_mat[i, i+1] = 1.0
+    trans_mat[0, 0] = 0.5
+    trans_mat[0, 1] = 0.5
+    trans_mat[statenum-1, 0] = 0.5
+    trans_mat[statenum-1, 1] = 0.5
 #        for i in xrange(n_state - statenum):
 #            print statenum, n_state, i
 #            gmm_list.pop(-1)
-        hmm = lognhgmm.siLogNHMMGMM(prior_state, trans_mat, gmm_list[:statenum])
-        
-        prior_state, trans_mat, gmm_list = hmm.getparams()
-        n_state = len(prior_state)
-        print n_state
-        print prior_state
-        funcs.siPrintArray2D('%.2f, ', trans_mat)
-        
-        
-        
-        return hmm
+    hmm = lognhgmm.siLogNHMMGMM(prior_state, trans_mat, gmm_list[:statenum])
+    
+    prior_state, trans_mat, gmm_list = hmm.getparams()
+    n_state = len(prior_state)
+    print n_state
+    print prior_state
+    funcs.siPrintArray2D('%.2f, ', trans_mat)
+    
+    return hmm
 
 
 def getRectsFromChain(chain):
@@ -344,28 +355,39 @@ def train(lpinfo_list, hmmgmmfile):
 if 1:
     cost_times = {}
     t1 = time.time()
-#    lpinfo_list2, whist2 = lpfuncs.getall_lps2(folderpath2, neednum2, stdshape[0], ifstrech=False)
+    lpinfo_list2, whist2 = lpfuncs.getall_lps2(folderpath2, neednum2, stdshape[0], ifstrech=False)
     lpinfo_list, whist = lpfuncs.getall_lps2(folderpath, neednum, stdshape[0], ifstrech=False)
-#    for key2 in whist2:
-#        if whist.has_key(key2):
-#            whist[key2] += whist2[key2]
-#        else:
-#            whist[key2] = whist2[key2]
+    for key2 in whist2:
+        if whist.has_key(key2):
+            whist[key2] += whist2[key2]
+        else:
+            whist[key2] = whist2[key2]
     print 'width list:'
     print whist
-    lpinfo_list = lpinfo_list #+ lpinfo_list2
+    lpinfo_list = lpinfo_list + lpinfo_list2
     t2 = time.time()
     cost_times['getall_lps2'] = t2-t1
     print 'total sample number:', len(lpinfo_list)
     
     
     t1 = time.time()
-    wgtcnn.train(lpinfo_list[:trainnum], batch_size=100, ishape=stdshape)
+    #training char classifier
+    print 'training char classifier ... '
+    wgtcnn.train(lpinfo_list[:trainnum], batch_size=400, ishape=stdshape, nkerns=4, h_out=16, sampletype=1, cnnparamsfile='wgtcnn.params.char.bin', cnnparamsfile_restore=None)
     t2 = time.time()
-    cost_times['wgtcnn.train'] = t2-t1
+    cost_times['wgtcnn.train_char'] = t2-t1
     
     t1 = time.time()
-    wgtcnn.fillObsChain(lpinfo_list, stdsize=stdshape)
+    #training left and right border of LP classifier
+    print 'training left and right border of LP classifier ... '
+    wgtcnn.train(lpinfo_list[:trainnum], batch_size=400, ishape=stdshape, nkerns=8, h_out=128, sampletype=2, cnnparamsfile='wgtcnn.params.lrborder.bin', cnnparamsfile_restore=None)
+    t2 = time.time()
+    cost_times['wgtcnn.train_lrborder'] = t2-t1
+    
+    exit()
+    
+    t1 = time.time()
+    wgtcnn.fillObsChain(lpinfo_list, stdsize=stdshape, nkerns=4, h_out=16, sampletype=1, cnnparamsfile='wgtcnn.params.char.bin')
     t2 = time.time()
     cost_times['wgtcnn.fillObsChain'] = t2-t1
     
@@ -386,9 +408,13 @@ elif 0:
     testerror(hmmgmmfile)
 
 #save txt info
-if 0:
+if 1:
+    wgtcnn.saveCNNParam2TXT('_%dx%d_'%(stdshape[0], stdshape[1]), cnnparamsfile = 'wgtcnn.params.bin')
+    exit()
     hmm = lognhgmm.siLogNHMMGMM()
     hmm.read(hmmgmmfile)
     hmm.saveTXT('log_nhmmgmm_info.txt')
-    wgtcnn.saveCNNParam2TXT()
+    
+
+
 
