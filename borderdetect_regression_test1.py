@@ -29,7 +29,7 @@ trainnum = neednum + neednum2 # - 4000
 teststart = 0 #neednum - 4000
 
 stdheight = 64
-gwndlen = 24
+gwndlen = 32
 bTrain = False
 
 
@@ -49,9 +49,9 @@ def histAnalyze(ys):
     hist1 = np.zeros(stdheight, dtype=np.int32)
     hist2 = np.zeros(stdheight, dtype=np.int32)
     for yi in xrange(ynum):
-        if y1[yi] > 0 and y1[yi] < stdheight:
+        if y1[yi] >= 0 and y1[yi] < stdheight:
             hist1[y1[yi]] += 1
-        if y2[yi] > 0 and y2[yi] < stdheight:
+        if y2[yi] >= 0 and y2[yi] < stdheight:
             hist2[y2[yi]] += 1
     
 #    print hist1
@@ -72,8 +72,8 @@ def getTrainingDatas(lpinfo_list):
         gimg = cv.imread(lpi.img_fn, cv.CV_LOAD_IMAGE_GRAYSCALE)
 #        chbbs = lpi.char_bndbox
         bbs = lpi.lp_bndbox
-        margin1 = np.random.randint(0, (bbs[3]-bbs[1]))
-        margin2 = np.random.randint(0, (bbs[3]-bbs[1]))
+        margin1 = np.random.randint(10, (bbs[3]-bbs[1]))
+        margin2 = np.random.randint(10, (bbs[3]-bbs[1]))
         marginw = (bbs[2]-bbs[0]) / 2
         bbs2 = [np.max([0, bbs[0]-marginw]), np.max([0, bbs[1]-margin1]), 
                 np.min([gimg.shape[1]-1, bbs[2]+marginw]), np.min([gimg.shape[0]-1, bbs[3]+margin2])]
@@ -131,8 +131,8 @@ def test(lpinfo_list):
         gimg = cv.imread(lpi.img_fn, cv.CV_LOAD_IMAGE_GRAYSCALE)
 #        chbbs = lpi.char_bndbox
         bbs = lpi.lp_bndbox
-        margin1 = np.random.randint(0, (bbs[3]-bbs[1]))
-        margin2 = np.random.randint(0, (bbs[3]-bbs[1]))
+        margin1 = np.random.randint(10, (bbs[3]-bbs[1]))
+        margin2 = np.random.randint(10, (bbs[3]-bbs[1]))
         marginw = (bbs[2]-bbs[0]) / 2
         bbs2 = [np.max([0, bbs[0]-marginw]), np.max([0, bbs[1]-margin1]), 
                 np.min([gimg.shape[1]-1, bbs[2]+marginw]), np.min([gimg.shape[0]-1, bbs[3]+margin2])]
@@ -232,7 +232,7 @@ if bTrain:
     
     train(lpinfo_list)
 
-elif 0:
+elif 1:
     cost_times = {}
     t1 = time.time()
     neednum = 1000
