@@ -365,4 +365,18 @@ def getall_lps2(folderpath, neednum=-1, rszh = 32, ifstrech=True):
 #    print hist
     
     return lpinfo_list, hist
+
+
+def getall_lps3(folderpath, neednum=-1):
+    lpinfo_list = readall2(folderpath, neednum)
+    lpinfo_num = len(lpinfo_list)
+    print lpinfo_num
+    if neednum < 0 or neednum > lpinfo_num:
+        neednum = lpinfo_num
+    lpinfo_list = lpinfo_list[:neednum]
+#    print hist
+    
+    return lpinfo_list
+    
+    
     

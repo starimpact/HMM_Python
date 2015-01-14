@@ -1,0 +1,1 @@
+{, , {{gafWgtList_0, {{gafMean_0_0, gfFactor_0_0, gafInvCovar_0_0}, {gafMean_0_1, gfFactor_0_1, gafInvCovar_0_1}}}, {gafWgtList_1, {{gafMean_1_0, gfFactor_1_0, gafInvCovar_1_0}, {gafMean_1_1, gfFactor_1_1, gafInvCovar_1_1}}}}};

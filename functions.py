@@ -116,7 +116,7 @@ def siSobelX_U8(imggray):
     sblx = cv2.Sobel(imggray, cv2.CV_16S, 1, 0)
     
     sblxy = np.abs(sblx)
-    sblxy = sblxy / 4
+    sblxy = sblxy / 2
     sblxy[sblxy>255] = 255
     
     return sblxy.astype(np.uint8)

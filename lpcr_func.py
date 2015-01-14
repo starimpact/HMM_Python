@@ -15,8 +15,9 @@ import ctypes
 import showdata
 import theano
 from ctypes import *
+import functions as funcs
 
-lpcr_func_c = ctypes.CDLL('lpcr_func_c.so')
+lpcr_func_c = ctypes.CDLL('./lpcr_func_c.so')
 
 
 def getsamples_scales_c(lpimg, newbbs, newchbbs, stdsize, sample_maxnum):
@@ -218,14 +219,19 @@ def load_lpcrdata_from_lpinfo_multiscale_pos_neg(lpinfolist, stdsize=(32, 14), s
     datalist = []
     imgvecall = []
     tagall = []
+    marginzoomh = 1
+    marginzoomw = 1
+    if sampletype == 2:
+        marginzoomh = 2
+        
     for idx, lp in enumerate(lpinfolist):
         imgfn = lp.img_fn
         gimg = cv2.imread(imgfn, cv2.CV_LOAD_IMAGE_GRAYSCALE)
 #        print gimg.flags
         chbbs = lp.char_bndbox
         bbs = lp.lp_bndbox
-        margin = (bbs[3]-bbs[1]) / 2
-        marginw = (bbs[2]-bbs[0]) / 2
+        margin = (bbs[3]-bbs[1]) / marginzoomh
+        marginw = (bbs[2]-bbs[0]) / marginzoomw
 #        print bbs, gimg.shape
         bbs2 = [np.max([0, bbs[0]-marginw]), np.max([0, bbs[1]-margin]), 
                 np.min([gimg.shape[1]-1, bbs[2]+marginw]), np.min([gimg.shape[0]-1, bbs[3]+margin])]
@@ -241,7 +247,7 @@ def load_lpcrdata_from_lpinfo_multiscale_pos_neg(lpinfolist, stdsize=(32, 14), s
                 continue
             newchbbs.append([chbbs[i][0] - bbs2[0], chbbs[i][1] - bbs2[1], chbbs[i][2] - bbs2[0], chbbs[i][3] - bbs2[1]])
         
-        
+#        lpimg = funcs.siSobel_U8(lpimg)
 #        print newchbbs
 #        print newbbs
         
@@ -268,7 +274,7 @@ def load_lpcrdata_from_lpinfo_multiscale_pos_neg(lpinfolist, stdsize=(32, 14), s
 #        cv2.waitKey(0)
 #        print len(taglist)
 #        for fimgvec, tag in zip(veclist, taglist):
-#            if tag==1:
+#            if tag==0:
 #                print tag
 #                imgvec = np.asarray(fimgvec)
 #                imgvec *= 255

@@ -1,0 +1,52 @@
+const float gafWgtList_0[4] = {2.26296e-01f, 1.90676e-01f, 2.81304e-01f, 3.01724e-01f};
+
+const float gafMean_0_0[2] = {1.95657e+01f, 8.37877e+01f};
+
+const float gfFactor_0_0 = -7.53304f;
+
+const float gafInvCovar_0_0[4] = {3.42344e-03f, 4.78846e-04f, 4.78846e-04f, 1.71800e-03f};
+
+const float gafMean_0_1[2] = {3.43769e+01f, 1.46782e+02f};
+
+const float gfFactor_0_1 = -7.67478f;
+
+const float gafInvCovar_0_1[4] = {1.81447e-03f, -3.10203e-04f, -3.10203e-04f, 2.39914e-03f};
+
+const float gafMean_0_2[2] = {7.52684e+01f, 1.00931e+02f};
+
+const float gfFactor_0_2 = -7.29182f;
+
+const float gafInvCovar_0_2[4] = {3.16912e-03f, 8.13719e-05f, 8.13719e-05f, 2.89141e-03f};
+
+const float gafMean_0_3[2] = {1.13217e+02f, 1.39066e+02f};
+
+const float gfFactor_0_3 = -8.06359f;
+
+const float gafInvCovar_0_3[4] = {1.18924e-03f, 2.43574e-04f, 2.43574e-04f, 1.69471e-03f};
+
+const float gafWgtList_1[4] = {2.41971e-01f, 2.52200e-01f, 2.17044e-01f, 2.88786e-01f};
+
+const float gafMean_1_0[2] = {1.35015e+02f, 1.91867e+01f};
+
+const float gfFactor_1_0 = -7.15641f;
+
+const float gafInvCovar_1_0[4] = {2.08899e-03f, 1.95116e-04f, 1.95116e-04f, 5.76490e-03f};
+
+const float gafMean_1_1[2] = {1.84556e+02f, 3.43277e+01f};
+
+const float gfFactor_1_1 = -7.10709f;
+
+const float gafInvCovar_1_1[4] = {3.72764e-03f, -5.03128e-04f, -5.03128e-04f, 3.62224e-03f};
+
+const float gafMean_1_2[2] = {1.43988e+02f, 7.07425e+01f};
+
+const float gfFactor_1_2 = -7.43578f;
+
+const float gafInvCovar_1_2[4] = {2.74099e-03f, 1.60323e-04f, 1.60323e-04f, 2.51425e-03f};
+
+const float gafMean_1_3[2] = {1.94105e+02f, 9.34956e+01f};
+
+const float gfFactor_1_3 = -7.59456f;
+
+const float gafInvCovar_1_3[4] = {2.87479e-03f, 1.18053e-04f, 1.18053e-04f, 1.74333e-03f};
+

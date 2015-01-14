@@ -270,20 +270,74 @@ def buildWeightCNN(ishape, batch_size, nkerns=4, h_out=16):
     return cost_train, cost_train_wegit, params, x, y, wgt, cost_test
     
 
-def buildWeightCNN2(ishape, batch_size):
+
+def buildWeightCNN_C1H2(ishape, batch_size):
     ######################
     # BUILD ACTUAL MODEL #
     ######################
     print '... building the model'
     rng = np.random.RandomState(23455)
     
-    nkerns0 = 4 #kernel number
-    nkerns1 = 8 #kernel number
+    nkerns0 = 8 #kernel number
     filtersize = 5 #kernel filter size
     poolsize = 2 #pooling size
-    h_out = 16 #hidden layer output number
+    h_out0 = 64 #hidden layer output number
+    h_out1 = 16 #hidden layer output number
     
-    print 'nkerns0:', nkerns0, 'nkerns1:', nkerns1, ', filtersize:', filtersize, ', poolsize:', poolsize, ', h_out:', h_out
+    print 'nkerns0:', nkerns0, ', filtersize:', filtersize, \
+        ', poolsize:', poolsize, ', h_out0:', h_out0, 'h_out1:', h_out1
+    x = T.matrix('x')   # the data is presented as rasterized images
+    y = T.ivector('y')
+    wgt = T.fvector('wgt')
+    
+    # Reshape matrix of rasterized images of shape (batch_size,28*28)
+    # to a 4D tensor, compatible with our LeNetConvPoolLayer
+    layer0_input = x.reshape((batch_size, 1, ishape[0], ishape[1]))
+    layer0 = LeNetConvPoolLayer(rng, input=layer0_input,
+            image_shape=(batch_size, 1, ishape[0], ishape[1]),
+            filter_shape=(nkerns0, 1, filtersize, filtersize), poolsize=(poolsize, poolsize))
+    
+    layer1_input = layer0.output.flatten(2)
+    l1_inputshape = ((ishape[0] - filtersize + 1) / poolsize, (ishape[1] - filtersize + 1) / poolsize)
+    l1_input_mod = ((ishape[0] - filtersize + 1) % poolsize, (ishape[1] - filtersize + 1) % poolsize)
+    print 'l1_inputshape:', l1_inputshape, l1_input_mod
+    # construct a fully-connected sigmoidal layer
+    layer1 = HiddenLayer(rng, input=layer1_input, n_in=nkerns0 * l1_inputshape[0] * l1_inputshape[1], 
+                         n_out=h_out0, activation=T.nnet.sigmoid)
+    
+    layer2 = HiddenLayer(rng, input=layer1.output, n_in=h_out0, 
+                         n_out=h_out1, activation=T.nnet.sigmoid)
+    
+    # classify the values of the fully-connected sigmoidal layer
+    layer3 = LogisticRegression(input=layer2.output, n_in=h_out1, n_out=1)
+    
+    # the cost we minimize during training is the NLL of the model
+    cost_train_wegit = layer3.negative_log_likelihood_weight(y, wgt)
+    cost_train = layer3.negative_log_likelihood(y)
+    
+    cost_test = layer3.negative_log_likelihood_test()
+    
+    params = layer3.params + layer2.params + layer1.params + layer0.params
+
+    return cost_train, cost_train_wegit, params, x, y, wgt, cost_test
+
+
+def buildWeightCNN_C2H2(ishape, batch_size):
+    ######################
+    # BUILD ACTUAL MODEL #
+    ######################
+    print '... building the model'
+    rng = np.random.RandomState(23455)
+    
+    nkerns0 = 8 #kernel number
+    nkerns1 = 16 #kernel number
+    filtersize = 5 #kernel filter size
+    poolsize = 2 #pooling size
+    h_out0 = 64 #hidden layer output number
+    h_out1 = 16 #hidden layer output number
+    
+    print 'nkerns0:', nkerns0, 'nkerns1:', nkerns1, ', filtersize:', filtersize, \
+        ', poolsize:', poolsize, ', h_out0:', h_out0, 'h_out1:', h_out1
     x = T.matrix('x')   # the data is presented as rasterized images
     y = T.ivector('y')
     wgt = T.fvector('wgt')
@@ -307,18 +361,21 @@ def buildWeightCNN2(ishape, batch_size):
     print 'l2_inputshape:', l2_inputshape, l2_input_mod
     # construct a fully-connected sigmoidal layer
     layer2 = HiddenLayer(rng, input=layer2_input, n_in=nkerns1 * l2_inputshape[0] * l2_inputshape[1], 
-                         n_out=h_out, activation=T.nnet.sigmoid)
+                         n_out=h_out0, activation=T.nnet.sigmoid)
+    
+    layer3 = HiddenLayer(rng, input=layer2.output, n_in=h_out0, 
+                         n_out=h_out1, activation=T.nnet.sigmoid)
     
     # classify the values of the fully-connected sigmoidal layer
-    layer3 = LogisticRegression(input=layer2.output, n_in=h_out, n_out=1)
+    layer4 = LogisticRegression(input=layer3.output, n_in=h_out1, n_out=1)
     
     # the cost we minimize during training is the NLL of the model
-    cost_train_wegit = layer3.negative_log_likelihood_weight(y, wgt)
-    cost_train = layer3.negative_log_likelihood(y)
+    cost_train_wegit = layer4.negative_log_likelihood_weight(y, wgt)
+    cost_train = layer4.negative_log_likelihood(y)
     
-    cost_test = layer3.negative_log_likelihood_test()
+    cost_test = layer4.negative_log_likelihood_test()
     
-    params = layer3.params + layer2.params + layer1.params + layer0.params
+    params = layer4.params + layer3.params + layer2.params + layer1.params + layer0.params
 
     return cost_train, cost_train_wegit, params, x, y, wgt, cost_test
 
@@ -359,9 +416,10 @@ def image_batch_training(lpinfo_list_tmp, ishape, batch_size, usewgt, train_mode
     
     posnum = np.sum(train_set_y==1)
     negnum = np.sum(train_set_y==0)
+    weight = 0.6
     wgtall = np.zeros_like(train_set_y, dtype=np.float32)
-    wgtall[train_set_y==1] = 0.5 / posnum
-    wgtall[train_set_y==0] = 0.5 / negnum
+    wgtall[train_set_y==1] = weight / posnum
+    wgtall[train_set_y==0] = (1-weight) / negnum
     
     n_train_batches = train_set_x.shape[0] / batch_size
     n_test_batches = test_set_x.shape[0] / batch_size
@@ -383,6 +441,7 @@ def image_batch_training(lpinfo_list_tmp, ishape, batch_size, usewgt, train_mode
     rightnumall = [0, 0]
     numall = [0, 0]
     test_cost = 0
+    thred = 0.1 # 0 ~ 1
     for tbi in xrange(n_test_batches):
         tmp_test = test_set_x[tbi*batch_size:(tbi+1)*batch_size, :]
         tmp_y = test_set_y[tbi*batch_size:(tbi+1)*batch_size]
@@ -394,13 +453,13 @@ def image_batch_training(lpinfo_list_tmp, ishape, batch_size, usewgt, train_mode
         
         posnum = np.sum(tmp_y==1)
         posret = ret[tmp_y==1]
-        rightposnum = np.sum(posret>0.5)
+        rightposnum = np.sum(posret>=thred)
         rightnumall[0] += rightposnum
         numall[0] += posnum
         
         negnum = np.sum(tmp_y==0)
         negret = ret[tmp_y==0]
-        rightnegnum = np.sum(negret<0.5)
+        rightnegnum = np.sum(negret<thred)
         rightnumall[1] += rightnegnum
         numall[1] += negnum
     
@@ -410,7 +469,8 @@ def image_batch_training(lpinfo_list_tmp, ishape, batch_size, usewgt, train_mode
     return numall, rightnumall, test_cost
     
 
-def train(lpinfo_list, batch_size=100, ishape=(32, 14), nkerns=4, h_out=16, sampletype=1, cnnparamsfile=None, cnnparamsfile_restore=None):
+def train(lpinfo_list, batch_size=100, ishape=(32, 14), nkerns=4, h_out=16, sampletype=1, \
+            cnnparamsfile=None, cnnparamsfile_restore=None):
     """ Demonstrates lenet on MNIST dataset
 
     :type learning_rate: float
@@ -437,7 +497,7 @@ def train(lpinfo_list, batch_size=100, ishape=(32, 14), nkerns=4, h_out=16, samp
     n_epochs = 100
     
     image_num = len(lpinfo_list)
-    image_batch_size = 400
+    image_batch_size = 200
     image_batch_num = image_num / image_batch_size
     
     lpinfo_list_rnd = np.random.permutation(lpinfo_list)
@@ -452,8 +512,9 @@ def train(lpinfo_list, batch_size=100, ishape=(32, 14), nkerns=4, h_out=16, samp
     print 'image_batch_size:', image_batch_size, ', image_batch_num:', image_batch_num
     
     
-    cost_train, cost_train_weight, params, x, y, wgt, cost_test = buildWeightCNN(ishape, batch_size, nkerns, h_out)
-#    cost_train, cost_train_weight, params, x, y, wgt, cost_test = buildWeightCNN2(ishape, batch_size)
+#    cost_train, cost_train_weight, params, x, y, wgt, cost_test = buildWeightCNN(ishape, batch_size, nkerns, h_out)
+#    cost_train, cost_train_weight, params, x, y, wgt, cost_test = buildWeightCNN_C2H2(ishape, batch_size)
+    cost_train, cost_train_weight, params, x, y, wgt, cost_test = buildWeightCNN_C1H2(ishape, batch_size)
     
     if cnnparamsfile_restore is not None:
         print 'set model from %s....'%(cnnparamsfile_restore)
@@ -514,11 +575,11 @@ def train(lpinfo_list, batch_size=100, ishape=(32, 14), nkerns=4, h_out=16, samp
             rightnumall[1] += rightnumallone[1]
             test_cost += test_costone
             print '++++ img_batch:%d/%d'%(img_batchidx+1, image_batch_num), \
-                '+:%d/%d -:%d/%d'%(rightnumallone[0], numallone[0], rightnumallone[1], numallone[1]), \
+                '+:%.2f%%(%d/%d) -:%.2f%%(%d/%d)'%(rightnumallone[0] * 100. / numallone[0], rightnumallone[0], numallone[0], rightnumallone[1] * 100. / numallone[1], rightnumallone[1], numallone[1]), \
                 'test_cost:%.6f'%(test_costone/np.sum(numallone))
             
         print '---------- epoch:%d/%d'%(epoch, n_epochs), \
-            '+:%d/%d -:%d/%d'%(rightnumall[0], numall[0], rightnumall[1], numall[1]), \
+            '+:%.2f%%(%d/%d) -:%.2f%%(%d/%d)'%(rightnumall[0] * 100. / numall[0], rightnumall[0], numall[0], rightnumall[1] * 100. / numall[1], rightnumall[1], numall[1]), \
             'test_cost:%.6f'%(test_cost/np.sum(numall))
         print
 #        print 'epoch:%d/%d'%(epoch, n_epochs), '  test_cost:', np.mean(test_cost)

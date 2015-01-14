@@ -17,6 +17,7 @@ gshowtime = False
 #gaussian single model
 class siLogGSM:
     def __fullRankCoVariance(self):
+#        print self.__covariance
         u, s, v = np.linalg.svd(self.__covariance)
         for i in xrange(len(s)):
             s[i] = s[i] if s[i] > self.__minvar else self.__minvar
@@ -320,6 +321,7 @@ class siLogGMM:
         
     
     def train(self, obsv, maxiter=10):
+        print 'gmm training....'
 #        tms = time.time()
 #        pallold = self.calcLogProbabilityOfSeries(obsv)
 #        tme = time.time()
@@ -329,13 +331,23 @@ class siLogGMM:
             tms = time.time()
             pallnew = self.__train_iter(obsv)
             tme = time.time()
-            print 'iter %d -> probold:%.4f cost:%.3f'%(i, pallnew, tme-tms)
+            print 'iter %d -> probold:%.4f cost:%.3f'%(i, pallnew, tme-tms),
+            if 1:
+                print '[',            
+                for wgt in self.__wgtlist:
+                    print '%.4f,'%(wgt), 
+                print ']'
+            else:
+                print
 #            pallnew = self.calcLogProbabilityOfSeries(obsv)
 #            print '%d->[%.12f], '%(i, pallnew)
             if np.abs(pallnew - pallold)<1e-3:
                 print 'convergenced...'
                 break
             pallold = pallnew
+        for gm in self.__gmlist:
+            meanv, covv = gm.getParams()
+            print meanv
             
 
 
@@ -344,6 +356,8 @@ class siLogNHMMGMM:
     def __init__(self, prior_state=None, trans_mat=None, gmm_list=None):
         self.__minimum = 1e-32
         self.__logminimum = -1024 * 16
+        self.__prior_state = None
+        self.__trans_mat = None
         if prior_state is not None:
             self.__prior_state = prior_state #a vector, n_state
             self.__n_state = prior_state.shape[0]
@@ -535,39 +549,45 @@ class siLogNHMMGMM:
         f = open(fn, 'wb')
         cPickle.dump((self.__prior_state, self.__trans_mat, self.__gmm_list), f)
         f.close()
-        print 'save...'
+        print 'saved into %s...'%(fn)
     
     
     def saveTXT(self, fn):
         paramList = []
-        #write prior_sate
-        pslen = len(self.__prior_state)
-        paramList.append('gafPriorState')
-        paramTXT = 'extern const float gafPriorState[%d];\n'%(pslen)
-        gmmTXT = 'const float gafPriorState[%d] = '%(pslen)
-        gmmTXT += '{'
-        for pi in xrange(pslen):
-            gmmTXT += '%.5ff'%self.__prior_state[pi]
-            if pi < pslen-1:
-                gmmTXT += ', '
-        gmmTXT += '};\n\n';
-        
-        #write trans_mat
-        paramList.append('gafTransmat')
-        tmh, tmw = self.__trans_mat.shape
-        paramTXT += 'extern const float gafTransmat[%d];\n'%(tmh * tmw)
-        gmmTXT += 'const float gafTransmat[%d] = '%(tmh * tmw)
-        gmmTXT += '{'
-        for ri in xrange(tmh):
-#            gmmTXT += '{'
-            for ci in xrange(tmw):
-                gmmTXT += '%.5ff'%(self.__trans_mat[ri, ci])
-                if ci < tmw-1:
+        paramTXT = ''
+        gmmTXT = ''
+        if 0:
+            #write prior_sate
+            pslen = len(self.__prior_state)
+            paramList.append('gafPriorState')
+            paramTXT += 'extern const float gafPriorState[%d];\n'%(pslen)
+            gmmTXT += 'const float gafPriorState[%d] = '%(pslen)
+            gmmTXT += '{'
+            for pi in xrange(pslen):
+                gmmTXT += '%.5ff'%self.__prior_state[pi]
+                if pi < pslen-1:
                     gmmTXT += ', '
-#            gmmTXT += '}'
-            if ri < tmh-1:
-                gmmTXT += ', '
-        gmmTXT += '};\n\n'
+            gmmTXT += '};\n\n';
+            
+            #write trans_mat
+            paramList.append('gafTransmat')
+            tmh, tmw = self.__trans_mat.shape
+            paramTXT += 'extern const float gafTransmat[%d];\n'%(tmh * tmw)
+            gmmTXT += 'const float gafTransmat[%d] = '%(tmh * tmw)
+            gmmTXT += '{'
+            for ri in xrange(tmh):
+    #            gmmTXT += '{'
+                for ci in xrange(tmw):
+                    gmmTXT += '%.5ff'%(self.__trans_mat[ri, ci])
+                    if ci < tmw-1:
+                        gmmTXT += ', '
+    #            gmmTXT += '}'
+                if ri < tmh-1:
+                    gmmTXT += ', '
+            gmmTXT += '};\n\n'
+        else:
+            paramList.append('')
+            paramList.append('')
         
         #write gmm_list
         gmmTXTList = []
@@ -627,8 +647,7 @@ class siLogNHMMGMM:
         self.__prior_state = params[0]
         self.__trans_mat = params[1]
         self.__gmm_list = params[2]
-        
-        self.__n_state = self.__prior_state.shape[0]
+        self.__n_state = len(self.__gmm_list)
         
         
     def getparams(self):

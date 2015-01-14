@@ -17,7 +17,7 @@ import time
 
 maxiter = 10
 gmm_maxiter = 100
-neednum = 400
+neednum = 2000
 gmmsize = 4
 hmmgmmfile = 'lp_loghmmgmm(2014129.2)_hmmmaxiter[' + str(maxiter) + ']_samplenum[' + str(neednum) + ']_gmmsize[' + str(gmmsize) + ']_gmmmaxiter[' + str(gmm_maxiter) + ']' + '.bin'
 #folderpath = '/Users/mzhang/work/LP Data2/'
@@ -25,7 +25,8 @@ folderpath = '/Users/mzhang/work/LPR_TrainData/new/'
 neednum2 = 0
 folderpath2 = '/Users/mzhang/work/LPR_TrainData/old/'
 samplestep = 1
-stdshape = (28, 14) #(28, 32) #(28, 14)
+stdshape1 = (28, 14) #(28, 32) #(28, 14)
+stdshape2 = (28, 32) #(28, 32) #(28, 14)
 gmmvecdim = 8
 #neednum = 100
 trainnum = neednum + neednum2 # - 4000
@@ -355,8 +356,8 @@ def train(lpinfo_list, hmmgmmfile):
 if 1:
     cost_times = {}
     t1 = time.time()
-    lpinfo_list2, whist2 = lpfuncs.getall_lps2(folderpath2, neednum2, stdshape[0], ifstrech=False)
-    lpinfo_list, whist = lpfuncs.getall_lps2(folderpath, neednum, stdshape[0], ifstrech=False)
+    lpinfo_list2, whist2 = lpfuncs.getall_lps2(folderpath2, neednum2, stdshape1[0], ifstrech=False)
+    lpinfo_list, whist = lpfuncs.getall_lps2(folderpath, neednum, stdshape1[0], ifstrech=False)
     for key2 in whist2:
         if whist.has_key(key2):
             whist[key2] += whist2[key2]
@@ -370,24 +371,38 @@ if 1:
     print 'total sample number:', len(lpinfo_list)
     
     
+#    t1 = time.time()
+#    #training char classifier
+#    print 'training char classifier ... '
+#    nkerns = 8
+#    h_out = 128
+#    wgtcnn.train(lpinfo_list[:trainnum], batch_size=200, ishape=stdshape1, nkerns=nkerns, h_out=h_out, \
+#                sampletype=1, cnnparamsfile='wgtcnn.params.char(' + str(stdshape1[0]) + 'x' + str(stdshape1[0]) + ')(' \
+#                + str(nkerns) + '_' + str(h_out) + ').bin', \
+#                cnnparamsfile_restore=None)
+#    t2 = time.time()
+#    cost_times['wgtcnn.train_char'] = t2-t1
+    
     t1 = time.time()
     #training char classifier
     print 'training char classifier ... '
-    wgtcnn.train(lpinfo_list[:trainnum], batch_size=400, ishape=stdshape, nkerns=4, h_out=16, sampletype=1, cnnparamsfile='wgtcnn.params.char.bin', cnnparamsfile_restore=None)
+    wgtcnn.train(lpinfo_list[:trainnum], batch_size=200, ishape=stdshape1, \
+                sampletype=1, cnnparamsfile='wgtcnn3.params.char(' + str(stdshape1[0]) + 'x' + str(stdshape1[1]) + ').bin', \
+                cnnparamsfile_restore=None)
     t2 = time.time()
-    cost_times['wgtcnn.train_char'] = t2-t1
+    cost_times['wgtcnn4.train_char'] = t2-t1
     
     t1 = time.time()
     #training left and right border of LP classifier
     print 'training left and right border of LP classifier ... '
-    wgtcnn.train(lpinfo_list[:trainnum], batch_size=400, ishape=stdshape, nkerns=8, h_out=128, sampletype=2, cnnparamsfile='wgtcnn.params.lrborder.bin', cnnparamsfile_restore=None)
+    wgtcnn.train(lpinfo_list[:trainnum], batch_size=200, ishape=stdshape2, nkerns=8, h_out=128, sampletype=2, cnnparamsfile='wgtcnn.params.lrborder.bin', cnnparamsfile_restore=None)
     t2 = time.time()
     cost_times['wgtcnn.train_lrborder'] = t2-t1
     
     exit()
     
     t1 = time.time()
-    wgtcnn.fillObsChain(lpinfo_list, stdsize=stdshape, nkerns=4, h_out=16, sampletype=1, cnnparamsfile='wgtcnn.params.char.bin')
+    wgtcnn.fillObsChain(lpinfo_list, stdsize=stdshape1, nkerns=4, h_out=16, sampletype=1, cnnparamsfile='wgtcnn.params.char.bin')
     t2 = time.time()
     cost_times['wgtcnn.fillObsChain'] = t2-t1
     
@@ -409,7 +424,8 @@ elif 0:
 
 #save txt info
 if 1:
-    wgtcnn.saveCNNParam2TXT('_%dx%d_'%(stdshape[0], stdshape[1]), cnnparamsfile = 'wgtcnn.params.bin')
+    wgtcnn.saveCNNParam2TXT('_%dx%d_'%(stdshape1[0], stdshape1[1]), cnnparamsfile = 'wgtcnn.params.char.0.058689.bin')
+    wgtcnn.saveCNNParam2TXT('_%dx%d_'%(stdshape2[0], stdshape2[1]), cnnparamsfile = 'wgtcnn.params.lrborder.0.000771.bin')
     exit()
     hmm = lognhgmm.siLogNHMMGMM()
     hmm.read(hmmgmmfile)

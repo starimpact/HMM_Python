@@ -472,10 +472,10 @@ int getsamples_scales_in_out(uchar *pubyImage, int dwImgW, int dwImgH,
         }
     }
     
-    //   for (dwPI = 0; dwPI < dwVecLen; dwPI++) {
-    //       printf("%.3f, ", pfSampleList[dwPI]);
-    //    }
-    //    printf("\n");
+     //   for (dwPI = 0; dwPI < dwVecLen; dwPI++) {
+     //      printf("%.3f, ", pfSampleList[dwPI]);
+     //   }
+     //   printf("\n");
     
     *pdwSampleNum = dwSampleNumAll;
     
